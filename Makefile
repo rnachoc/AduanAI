@@ -23,10 +23,11 @@ MAVEN := docker run --rm -v "$(CURDIR)":/src -v aduana-m2:/root/.m2 \
 PYTHON := $(RUN) $(PYTHON_IMAGE) python
 LINT := $(RUN) $(SAFE_GIT) $(LINT_IMAGE)
 NODE := docker run --rm -v "$(CURDIR)":/src -v aduana-npm:/root/.npm -w /src/demo $(NODE_IMAGE)
+SCENARIOS := scenarios/support-happy-path.yaml scenarios/injected-refund-direct.yaml
 DIRECT_URLS := crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo demo-direct hooks secrets
+	test-policy test-audit test-gateway test-demo demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -90,7 +91,13 @@ test-demo: ## Contract-test the demo MCP servers and the scripted agent
 
 demo-direct: ## Run the scenarios straight against the demo servers, without Aduana
 	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
-	$(COMPOSE) run --rm agent --direct $(DIRECT_URLS) scenarios/support-happy-path.yaml scenarios/injected-refund-direct.yaml
+	$(COMPOSE) run --rm agent --direct $(DIRECT_URLS) $(SCENARIOS)
+
+e2e: ## Run the scenarios through the gateway, in 2026-07-28 and in 2025-11-25 mode
+	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
+	$(COMPOSE) run --rm agent --gateway http://gateway:8080/mcp $(SCENARIOS)
+	$(COMPOSE) up -d --wait --force-recreate payments
+	$(COMPOSE) run --rm agent --legacy --gateway http://gateway:8080/mcp $(SCENARIOS)
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks

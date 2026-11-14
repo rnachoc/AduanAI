@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The demo MCP servers behind the gateway in the local stack.
+aduana:
+  upstreams:
+    - name: crm
+      endpoint: http://crm:3001/mcp
+      timeout: 5s
+    - name: payments
+      endpoint: http://payments:3002/mcp
+      timeout: 5s
+    - name: webfetch
+      endpoint: http://webfetch:3003/mcp
+      timeout: 5s

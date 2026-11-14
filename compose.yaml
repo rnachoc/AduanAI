@@ -26,6 +26,10 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8780}:8080"
+    environment:
+      SPRING_CONFIG_IMPORT: optional:file:/etc/aduana/upstreams.yaml
+    volumes:
+      - ./deploy/upstreams.demo.yaml:/etc/aduana/upstreams.yaml:ro
 
   crm: &demo-server
     build:
