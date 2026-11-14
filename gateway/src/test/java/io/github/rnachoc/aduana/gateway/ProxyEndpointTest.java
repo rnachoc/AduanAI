@@ -137,7 +137,12 @@ class ProxyEndpointTest {
   void the_tool_list_merges_every_upstream_under_server_prefixed_names() {
     JsonNode result = client.modern("tools/list", McpTestClient.modernParams()).body();
     List<String> names =
-        result.path("result").path("tools").valueStream().map(t -> t.path("name").asString()).toList();
+        result
+            .path("result")
+            .path("tools")
+            .valueStream()
+            .map(t -> t.path("name").asString())
+            .toList();
     assertThat(names).contains("crm__get_customer", "payments__refund", "slow__wait");
     assertThat(result.path("result").has("ttlMs")).isTrue();
     assertThat(result.path("result").has("cacheScope")).isTrue();
@@ -145,7 +150,8 @@ class ProxyEndpointTest {
 
   @Test
   void a_call_is_forwarded_under_its_upstream_name_and_its_result_comes_back_unchanged() {
-    JsonNode reply = client.callTool("crm__get_customer", arguments("customer_id", "C-1001")).body();
+    JsonNode reply =
+        client.callTool("crm__get_customer", arguments("customer_id", "C-1001")).body();
     assertThat(reply.path("result").path("structuredContent").path("customer_id").asString())
         .isEqualTo("C-1001");
     JsonNode forwarded = CRM.requests().getLast();
@@ -164,7 +170,8 @@ class ProxyEndpointTest {
   void a_tool_on_an_unknown_server_is_tool_not_found() {
     JsonNode reply = client.callTool("nowhere__anything", arguments()).body();
     assertThat(reply.path("error").path("code").asInt()).isEqualTo(-32602);
-    assertThat(reply.path("error").path("data").path("code").asString()).isEqualTo("TOOL_NOT_FOUND");
+    assertThat(reply.path("error").path("data").path("code").asString())
+        .isEqualTo("TOOL_NOT_FOUND");
   }
 
   @Test
@@ -191,7 +198,8 @@ class ProxyEndpointTest {
     try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
       List<Callable<JsonNode>> calls =
           IntStream.range(0, 10)
-              .mapToObj(i -> (Callable<JsonNode>) () -> client.callTool("slow__wait", arguments()).body())
+              .mapToObj(
+                  i -> (Callable<JsonNode>) () -> client.callTool("slow__wait", arguments()).body())
               .toList();
       for (Future<JsonNode> future : pool.invokeAll(calls)) {
         assertThat(future.get().path("result").path("structuredContent").path("code").asString())
@@ -205,7 +213,8 @@ class ProxyEndpointTest {
   @Test
   void oversized_arguments_are_refused_before_anything_is_forwarded() {
     int before = CRM.toolCallCount();
-    JsonNode reply = client.callTool("crm__get_customer", arguments("blob", "x".repeat(2000))).body();
+    JsonNode reply =
+        client.callTool("crm__get_customer", arguments("blob", "x".repeat(2000))).body();
     assertThat(reply.path("result").path("structuredContent").path("code").asString())
         .isEqualTo("ARGS_INVALID");
     assertThat(CRM.toolCallCount()).isEqualTo(before);
@@ -216,7 +225,9 @@ class ProxyEndpointTest {
     ObjectNode params = McpTestClient.modernParams();
     McpTestClient.Reply reply =
         client.send(
-            "tools/list", params, Map.of("MCP-Protocol-Version", "2025-11-25", "Mcp-Method", "tools/list"));
+            "tools/list",
+            params,
+            Map.of("MCP-Protocol-Version", "2025-11-25", "Mcp-Method", "tools/list"));
     assertThat(reply.status()).isEqualTo(400);
     assertThat(reply.body().path("error").path("code").asInt()).isEqualTo(-32020);
   }
@@ -228,7 +239,8 @@ class ProxyEndpointTest {
 
   @Test
   void an_unsupported_method_is_method_not_found() {
-    McpTestClient.Reply reply = client.modern("sampling/createMessage", McpTestClient.modernParams());
+    McpTestClient.Reply reply =
+        client.modern("sampling/createMessage", McpTestClient.modernParams());
     assertThat(reply.body().path("error").path("code").asInt()).isEqualTo(-32601);
   }
 
@@ -256,7 +268,8 @@ class ProxyEndpointTest {
     init.putObject("capabilities");
     init.putObject("clientInfo").put("name", "old").put("version", "1");
     JsonNode initialized = client.send("initialize", init, Map.of()).body();
-    assertThat(initialized.path("result").path("protocolVersion").asString()).isEqualTo("2025-11-25");
+    assertThat(initialized.path("result").path("protocolVersion").asString())
+        .isEqualTo("2025-11-25");
     assertThat(initialized.path("result").path("capabilities").has("tools")).isTrue();
 
     Map<String, String> legacy = Map.of("MCP-Protocol-Version", "2025-11-25");
