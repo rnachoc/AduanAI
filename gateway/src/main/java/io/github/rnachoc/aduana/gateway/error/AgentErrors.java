@@ -41,9 +41,15 @@ public class AgentErrors {
    * @return a `tools/call` result flagged as an error
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public ObjectNode toolResult(AgentErrorCode code, Map<String, String> extra) {
+  public ObjectNode toolResult(AgentErrorCode code, Map<String, ?> extra) {
     ObjectNode structured = structured(code);
-    extra.forEach(structured::put);
+    extra.forEach((name, value) -> {
+      if (value instanceof Number number) {
+        structured.put(name, number.longValue());
+      } else {
+        structured.put(name, String.valueOf(value));
+      }
+    });
     ObjectNode result = json.createObjectNode();
     result.put("resultType", "complete");
     result.putArray("content").addObject().put("type", "text").put("text", structured.toString());

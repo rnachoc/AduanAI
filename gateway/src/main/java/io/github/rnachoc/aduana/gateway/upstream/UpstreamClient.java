@@ -43,6 +43,7 @@ public class UpstreamClient {
 
   private final HttpClient http;
   private final JsonMapper json;
+  private final StdioConnector stdio;
   private final AtomicLong nextId = new AtomicLong(1);
   private final AtomicInteger inFlight = new AtomicInteger();
 
@@ -51,11 +52,13 @@ public class UpstreamClient {
    *
    * @param http the shared HTTP client
    * @param json the shared JSON mapper
+   * @param stdio runs and talks to stdio servers
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public UpstreamClient(HttpClient http, JsonMapper json) {
+  public UpstreamClient(HttpClient http, JsonMapper json, StdioConnector stdio) {
     this.http = http;
     this.json = json;
+    this.stdio = stdio;
   }
 
   /**
@@ -88,6 +91,14 @@ public class UpstreamClient {
   public UpstreamResponse send(
       UpstreamServer server, String method, ObjectNode params, Optional<Secret> credential) {
     long id = nextId.getAndIncrement();
+    if (server.stdio()) {
+      inFlight.incrementAndGet();
+      try {
+        return stdio.send(server, body(method, params, id), id);
+      } finally {
+        inFlight.decrementAndGet();
+      }
+    }
     HttpRequest request = buildRequest(server, method, params, id, credential);
     inFlight.incrementAndGet();
     CompletableFuture<HttpResponse<byte[]>> future =
@@ -150,6 +161,29 @@ public class UpstreamClient {
   }
 
   /**
+   * Builds the JSON-RPC request with the `_meta` 2026-07-28 requires.
+   *
+   * @param method the JSON-RPC method
+   * @param params the parameters
+   * @param id the JSON-RPC id
+   * @return the request body
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private ObjectNode body(String method, ObjectNode params, long id) {
+    ObjectNode body = json.createObjectNode();
+    body.put("jsonrpc", "2.0");
+    body.put("id", id);
+    body.put("method", method);
+    ObjectNode copy = params.deepCopy();
+    ObjectNode meta = copy.putObject("_meta");
+    meta.put(McpProtocol.META_PROTOCOL_VERSION, McpProtocol.MODERN_VERSION);
+    meta.putObject(McpProtocol.META_CLIENT_CAPABILITIES);
+    meta.putObject(McpProtocol.META_CLIENT_INFO).put("name", "aduana").put("version", "0.1.0");
+    body.set("params", copy);
+    return body;
+  }
+
+  /**
    * Builds the POST with the body, `_meta` and headers 2026-07-28 requires.
    *
    * @param server the upstream
@@ -166,16 +200,7 @@ public class UpstreamClient {
       ObjectNode params,
       long id,
       Optional<Secret> credential) {
-    ObjectNode body = json.createObjectNode();
-    body.put("jsonrpc", "2.0");
-    body.put("id", id);
-    body.put("method", method);
-    ObjectNode copy = params.deepCopy();
-    ObjectNode meta = copy.putObject("_meta");
-    meta.put(McpProtocol.META_PROTOCOL_VERSION, McpProtocol.MODERN_VERSION);
-    meta.putObject(McpProtocol.META_CLIENT_CAPABILITIES);
-    meta.putObject(McpProtocol.META_CLIENT_INFO).put("name", "aduana").put("version", "0.1.0");
-    body.set("params", copy);
+    ObjectNode body = body(method, params, id);
     HttpRequest.Builder builder =
         HttpRequest.newBuilder(server.endpoint())
             .timeout(server.timeout())

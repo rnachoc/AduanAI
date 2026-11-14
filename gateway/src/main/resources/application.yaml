@@ -30,3 +30,5 @@ aduana:
   bootstrap:
     admin-email: ${ADUANA_BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${ADUANA_BOOTSTRAP_ADMIN_PASSWORD:}
+  stdio:
+    allowed-commands: ${ADUANA_STDIO_ALLOWED_COMMANDS:}

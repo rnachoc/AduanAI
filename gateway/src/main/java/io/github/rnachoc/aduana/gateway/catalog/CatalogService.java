@@ -144,7 +144,8 @@ public class CatalogService {
    */
   @Transactional
   public CatalogServer register(UUID tenantId, ServerRequest request, Optional<UUID> actorId) {
-    new UpstreamServer(request.name(), URI.create(request.endpoint()), request.timeout());
+    UpstreamServer upstream =
+        new UpstreamServer(request.name(), URI.create(request.endpoint()), request.timeout());
     if (repository.serverByName(tenantId, request.name()).isPresent()) {
       throw new IllegalArgumentException("A server with that name exists");
     }
@@ -154,7 +155,7 @@ public class CatalogService {
             tenantId,
             id,
             request.name(),
-            "http",
+            upstream.stdio() ? "stdio" : "http",
             request.endpoint(),
             request.strict(),
             request.status(),
