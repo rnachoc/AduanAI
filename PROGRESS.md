@@ -10,7 +10,7 @@
 | 5 | Verifiable log | done |
 | 6 | Approvals | done |
 | 7 | Redaction, injection flags and taint | done |
-| 8 | Limits, idempotency and stdio servers | not started |
+| 8 | Limits, idempotency and stdio servers | done |
 | 9 | Console | not started |
 | 10 | Simulation and replay | not started |
 | 11 | Attack bench, performance and reports | not started |
@@ -180,3 +180,24 @@ Done on branch `phase-07-inspection`, merged into `main`.
 | CA7.2 an attacker IBAN from `fetch_url` used in `refund` goes to approval with `FLOW_FROM_UNTRUSTED` and the source `seq` | met: `an_iban_copied_from_an_untrusted_page_into_a_payment_needs_approval_and_says_where_it_came_from`, and `make e2e` (`injected-small-refund.yaml`: refund of 4 999 cents → `APPROVAL_PENDING`; entry flags `FLOW_FROM_UNTRUSTED`, `TAINT_SOURCE:$.destination_iban:seq=25`) |
 | CA7.3 the log never holds a sensitive value in clear | met: `the_log_never_holds_a_sensitive_value_in_clear`, and `make audit-verify` on a fresh stack after `make e2e`: `check_log_secrets: 72 entries, 0 values in clear` |
 | CA7.4 the database holds no untrusted values in clear, only hashes | met: `the_taint_table_holds_hashes_only` |
+
+## Phase 8: Limits, idempotency and stdio servers
+
+Done on branch `phase-08-limits`, merged into `main`.
+
+- Tests first (`LimitsTest` 8, `StdioTest` 5, `FakeStdioServer`, `demo/test/stdio.test.ts` 3): `55f3bcd`.
+- `limits/LimitService` and `limits/IdempotencyService`, `V6__limits_and_idempotency.sql`, result size
+  limit, `upstream/StdioConnector`, `notes` demo server over stdio, 85 % line coverage gate on the
+  gateway: `f0df97b`.
+- ADR 9, `docs/audit-format.md` (limit and idempotency entries), evidence.
+
+| CA | Result |
+|---|---|
+| CA8.1 going over the rate returns `RATE_LIMITED` with when to retry; counters survive a restart | met: `going_over_the_rate_answers_rate_limited_with_when_to_retry`, `the_counters_are_in_the_database_so_a_restarted_service_still_refuses`, and on the stack: 65 calls → 58 ok, 7 `RATE_LIMITED` with `retry_after_ms`; after `docker compose restart gateway` the bucket still holds 65 and the next call is refused |
+| CA8.2 same key and arguments execute once; same key, other arguments → `IDEMPOTENCY_CONFLICT` | met: `the_same_key_and_arguments_run_once_and_replay_the_stored_result`, `ten_parallel_calls_with_one_key_reach_the_upstream_once`, `the_same_key_with_other_arguments_is_an_idempotency_conflict`; on the stack three calls with one key give one `CALL_DECIDED` and two `IDEMPOTENT_REPLAY` |
+| CA8.3 a stdio command off the allow-list is not launched | met: `a_command_off_the_allow_list_is_never_launched` (`/usr/bin/touch` never creates its file; its tools never reach the catalog) |
+| CA8.4 a dead child is restarted or fails cleanly, never hangs | met: `a_child_that_dies_fails_the_call_and_the_next_call_starts_it_again` (`UPSTREAM_ERROR` in under 2 s, one relaunch), `a_child_that_hangs_times_out_is_stopped_and_started_again` (`UPSTREAM_TIMEOUT` at the 2 s timeout, one relaunch) |
+| budget, result size, clean environment | met: `a_principal_that_spends_its_daily_budget_gets_budget_exceeded`, `a_result_over_the_size_limit_is_not_passed_on`, `the_child_gets_a_clean_environment` (`LANG,PATH`) |
+
+Not done: memory limit for stdio children (not available portably from Java; documented in
+`docs/HANDOFF.md`), credentials for stdio servers, the `notes` server behind the gateway in compose.

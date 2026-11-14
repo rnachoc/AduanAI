@@ -23,8 +23,13 @@ public class TestDatabase {
   public static final String IMAGE =
       "postgres:18.7@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b";
 
+  /**
+   * Every cached Spring test context keeps its own pools open, so the default of 100 connections
+   * runs out once there are a dozen contexts.
+   */
   private static final PostgreSQLContainer CONTAINER =
-      new PostgreSQLContainer(DockerImageName.parse(IMAGE).asCompatibleSubstituteFor("postgres"));
+      new PostgreSQLContainer(DockerImageName.parse(IMAGE).asCompatibleSubstituteFor("postgres"))
+          .withCommand("postgres", "-c", "max_connections=400");
 
   /**
    * Starts the container once per test JVM and hands its connection details to Spring.

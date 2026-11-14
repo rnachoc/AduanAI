@@ -15,6 +15,8 @@ import io.github.rnachoc.aduana.gateway.inspection.Detectors;
 import io.github.rnachoc.aduana.gateway.inspection.Redactor;
 import io.github.rnachoc.aduana.gateway.inspection.ResultInspector;
 import io.github.rnachoc.aduana.gateway.inspection.TaintService;
+import io.github.rnachoc.aduana.gateway.limits.IdempotencyService;
+import io.github.rnachoc.aduana.gateway.limits.LimitService;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
 import io.github.rnachoc.aduana.gateway.policy.PolicyService;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamClient;
@@ -62,6 +64,8 @@ public class ToolCallService {
   private final ApprovalService approvals;
   private final TaintService taints;
   private final ResultInspector inspector;
+  private final LimitService limits;
+  private final IdempotencyService idempotency;
   private final UpstreamClient upstreams;
   private final AgentErrors errors;
   private final JsonMapper json;
@@ -77,6 +81,8 @@ public class ToolCallService {
    * @param approvals holds calls that need a person's approval
    * @param taints tracks values from untrusted results
    * @param inspector redacts and marks results
+   * @param limits counts call rates and budgets
+   * @param idempotency remembers results of calls sent with an idempotency key
    * @param upstreams the upstream client
    * @param errors builds agent-facing errors
    * @param json the shared JSON mapper
@@ -91,6 +97,8 @@ public class ToolCallService {
       ApprovalService approvals,
       TaintService taints,
       ResultInspector inspector,
+      LimitService limits,
+      IdempotencyService idempotency,
       UpstreamClient upstreams,
       AgentErrors errors,
       JsonMapper json) {
@@ -102,6 +110,8 @@ public class ToolCallService {
     this.approvals = approvals;
     this.taints = taints;
     this.inspector = inspector;
+    this.limits = limits;
+    this.idempotency = idempotency;
     this.upstreams = upstreams;
     this.errors = errors;
     this.json = json;
@@ -132,7 +142,8 @@ public class ToolCallService {
     ToolName name = new ToolName(offered.server().name(), offered.tool().name());
     JsonNode arguments = params.path("arguments");
     Optional<ObjectNode> valid = validArguments(offered, arguments);
-    if (valid.isEmpty()) {
+    Optional<Optional<String>> key = idempotencyKey(params);
+    if (valid.isEmpty() || key.isEmpty()) {
       record(
           principal,
           AuditRecord.of("ARGS_INVALID")
@@ -164,31 +175,219 @@ public class ToolCallService {
                 decision.reason().orElse(null),
                 decided.bundleSha256())
             .flags(callFlags(decision, logged.found(), taint));
-    if (decision instanceof Decision.RequireApproval approval) {
+    Call call =
+        new Call(principal, offered, name, decided, decision, intent, forwardedArguments, traceKey);
+    if (decision instanceof Decision.Deny || key.get().isEmpty()) {
       Optional<JsonNode> refused =
-          awaitApproval(principal, offered, name, decided, approval, intent);
+          decision instanceof Decision.Deny ? Optional.empty() : limit(call);
+      return refused.orElseGet(() -> proceed(call).result());
+    }
+    return idempotent(call, key.get().get());
+  }
+
+  /**
+   * Everything the later steps of a call need.
+   *
+   * @param principal the caller
+   * @param offered the tool
+   * @param name the tool name
+   * @param decided the policy decision and its bundle
+   * @param decision the decision after argument obligations
+   * @param intent the `CALL_DECIDED` entry
+   * @param arguments the arguments to forward
+   * @param traceKey the call's trace id, or empty
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private record Call(
+      Principal principal,
+      CatalogService.OfferedTool offered,
+      ToolName name,
+      PolicyService.Decided decided,
+      Decision decision,
+      AuditRecord.Builder intent,
+      ObjectNode arguments,
+      String traceKey) {}
+
+  /**
+   * What a call answered, and whether it reached the upstream.
+   *
+   * @param result the agent-facing result
+   * @param forwarded true when the upstream may have run the call
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private record Answer(JsonNode result, boolean forwarded) {}
+
+  /**
+   * Runs a call that carries an idempotency key: the first call with the key runs and its result is
+   * kept; a retry with the same arguments gets that result without reaching the upstream.
+   *
+   * @param call the call
+   * @param key the idempotency key
+   * @return the result
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private JsonNode idempotent(Call call, String key) {
+    Principal principal = call.principal();
+    String argsHash = AuditLog.hashOf(call.arguments());
+    IdempotencyService.Claim claim;
+    try {
+      claim = idempotency.claim(principal.tenantId(), principal.id(), key, argsHash);
+    } catch (DataAccessException exception) {
+      LOG.error("idempotency store unavailable, nothing forwarded");
+      return errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE);
+    }
+    if (!(claim instanceof IdempotencyService.Claim.Owner)) {
+      boolean replay = claim instanceof IdempotencyService.Claim.Replay;
+      AuditRecord.Builder entry =
+          AuditRecord.of("IDEMPOTENT_REPLAY")
+              .principal(principal.id())
+              .tool(call.name().server(), call.name().qualified())
+              .arguments(argsHash, call.intent().build().argsRedacted().orElseThrow());
+      if (!replay) {
+        entry.reason("IDEMPOTENCY_CONFLICT");
+      }
+      if (!record(principal, entry)) {
+        return errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE);
+      }
+      return claim instanceof IdempotencyService.Claim.Replay(JsonNode stored)
+          ? stored
+          : errors.toolResult(AgentErrorCode.IDEMPOTENCY_CONFLICT);
+    }
+    Answer answer = null;
+    try {
+      Optional<JsonNode> refused = limit(call);
       if (refused.isPresent()) {
         return refused.get();
       }
+      answer = proceed(call);
+      return answer.result();
+    } finally {
+      settle(principal, key, answer);
+    }
+  }
+
+  /**
+   * Keeps the result of a call that reached the upstream, or frees the key of one that did not, so
+   * that a retry runs it.
+   *
+   * @param principal the caller
+   * @param key the idempotency key
+   * @param answer the answer, or null when the call stopped before one
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private void settle(Principal principal, String key, Answer answer) {
+    try {
+      if (answer != null && answer.forwarded()) {
+        idempotency.complete(principal.tenantId(), principal.id(), key, answer.result());
+      } else {
+        idempotency.release(principal.tenantId(), principal.id(), key);
+      }
+    } catch (DataAccessException exception) {
+      LOG.error("idempotency store unavailable after the call");
+    }
+  }
+
+  /**
+   * Counts the call against its rate and budget limits.
+   *
+   * @param call the call
+   * @return the error result when a limit is reached, or empty
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Optional<JsonNode> limit(Call call) {
+    Principal principal = call.principal();
+    Optional<LimitService.Refusal> refusal;
+    try {
+      refusal =
+          limits.admit(
+              principal.tenantId(),
+              principal.id(),
+              call.name().qualified(),
+              call.offered().tool().cost());
+    } catch (DataAccessException exception) {
+      LOG.error("limit counters unavailable, nothing forwarded");
+      return Optional.of(errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE));
+    }
+    if (refusal.isEmpty()) {
+      return Optional.empty();
+    }
+    LimitService.Refusal refused = refusal.get();
+    AuditRecord.Builder entry =
+        AuditRecord.of("RATE_LIMITED")
+            .principal(principal.id())
+            .tool(call.name().server(), call.name().qualified())
+            .reason(refused.code());
+    if (!record(principal, entry)) {
+      return Optional.of(errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE));
+    }
+    return Optional.of(
+        errors.toolResult(
+            AgentErrorCode.valueOf(refused.code()),
+            Map.of("retry_after_ms", refused.retryAfter().toMillis())));
+  }
+
+  /**
+   * Approval, the intent entry, forwarding and the result: steps 8 to 12.
+   *
+   * @param call the call
+   * @return the answer
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Answer proceed(Call call) {
+    Principal principal = call.principal();
+    Decision decision = call.decision();
+    if (decision instanceof Decision.RequireApproval approval) {
+      Optional<JsonNode> refused =
+          awaitApproval(
+              principal, call.offered(), call.name(), call.decided(), approval, call.intent());
+      if (refused.isPresent()) {
+        return new Answer(refused.get(), false);
+      }
     } else {
-      if (!record(principal, intent)) {
-        return errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE);
+      if (!record(principal, call.intent())) {
+        return new Answer(errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE), false);
       }
       if (decision instanceof Decision.Deny) {
-        return errors.toolResult(AgentErrorCode.POLICY_DENIED);
+        return new Answer(errors.toolResult(AgentErrorCode.POLICY_DENIED), false);
       }
     }
     ObjectNode forward = json.createObjectNode();
-    forward.put("name", name.tool());
-    forward.set("arguments", forwardedArguments);
-    UpstreamServer server = offered.server().upstream();
+    forward.put("name", call.name().tool());
+    forward.set("arguments", call.arguments());
+    UpstreamServer server = call.offered().server().upstream();
     long started = System.nanoTime();
-    UpstreamResponse response = upstreams.send(server, "tools/call", forward, offered.credential());
+    UpstreamResponse response =
+        upstreams.send(server, "tools/call", forward, call.offered().credential());
     long latency = (System.nanoTime() - started) / 1_000_000;
     Completion completion =
         new Completion(
-            principal, offered, name, decided.bundleSha256(), decision.obligations(), traceKey);
-    return complete(completion, server, response, latency);
+            principal,
+            call.offered(),
+            call.name(),
+            call.decided().bundleSha256(),
+            decision.obligations(),
+            call.traceKey());
+    JsonNode result = complete(completion, server, response, latency);
+    return new Answer(result, !(response instanceof UpstreamResponse.Unavailable));
+  }
+
+  /**
+   * Reads the idempotency key from `_meta["aduana/idempotency-key"]`.
+   *
+   * @param params the call parameters
+   * @return empty when the key is present but not a string of 1 to 200 characters; otherwise the
+   *     key, or an empty optional when there is none
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  static Optional<Optional<String>> idempotencyKey(ObjectNode params) {
+    JsonNode key = params.path("_meta").path(IdempotencyService.META_KEY);
+    if (key.isMissingNode() || key.isNull()) {
+      return Optional.of(Optional.empty());
+    }
+    if (!key.isString() || key.asString().isEmpty() || key.asString().length() > 200) {
+      return Optional.empty();
+    }
+    return Optional.of(Optional.of(key.asString()));
   }
 
   /**
@@ -332,6 +531,12 @@ public class ToolCallService {
     boolean unknownTool = false;
     JsonNode untrusted = null;
     switch (response) {
+      case UpstreamResponse.Result(JsonNode value)
+          when json.writeValueAsBytes(value).length > properties.limits().maxResultBytes() -> {
+        LOG.warn("upstream {} answered a result over the size limit", server.name());
+        outcome = failed(principal, name, bundle, "RESULT_TOO_LARGE", latency);
+        result = errors.toolResult(AgentErrorCode.UPSTREAM_ERROR);
+      }
       case UpstreamResponse.Result(JsonNode value) -> {
         ResultInspector.Inspected inspected =
             inspector.inspect(value, List.copyOf(completion.obligations().redactResult()));

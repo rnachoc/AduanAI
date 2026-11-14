@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 7.
+Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 8.
 
 ## What exists
 
@@ -24,21 +24,22 @@ Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 7.
 
 ## What is left
 
-Phases 8 to 12 of `docs/PLAN.md` §10. Phase 7 added `inspection/` (Detectors, Redactor, InjectionScanner,
-TraceableValues, TaintService, ResultInspector), `V5__inspection.sql`, `docs/detectors.md`, ADR 10 and 19.
+Phases 9 to 12 of `docs/PLAN.md` §10. Phase 7 added `inspection/`, `V5__inspection.sql`,
+`docs/detectors.md`, ADR 10 and 19. Phase 8 added `limits/` (`LimitService`: per-tool and per-principal
+rates in one-minute windows plus a daily budget, all in `rate_bucket`; `IdempotencyService`:
+`_meta["aduana/idempotency-key"]`), `V6__limits_and_idempotency.sql`, the result size limit,
+`upstream/StdioConnector` (allow-listed `stdio:/path?arg=…` endpoints, clean environment, kill on
+timeout, restart with backoff), the `notes` demo server over stdio and ADR 9.
 
-Next is Phase 8, limits, idempotency and stdio (plan §5.8):
+Not done in Phase 8: a memory limit for stdio children (Java has no portable way to set one; run the
+gateway in a container with a memory limit, or pass `-Xmx`-style flags in the command when the child
+supports them), credentials for stdio servers (none is injected), and the `notes` server is not behind the
+gateway in `compose.yaml` because the gateway image has no Node.js; its stdio contract is tested in
+`demo/test/stdio.test.ts` and the gateway's stdio path in `StdioTest` with a Java fake.
 
-- `V6__limits.sql`: `rate_bucket (tenant_id, scope, window_start, count)` and `idempotency_record`; grants.
-- Rate limits per `(principal, tool)` and per principal (sliding window approximated by fixed windows in
-  PostgreSQL, ADR 9), `RATE_LIMITED` with a `retry_after_ms` field; counters survive a restart.
-- Daily budget from the catalog's `cost` per tool → `BUDGET_EXCEEDED`.
-- Idempotency key in `_meta["aduana/idempotency-key"]`: same key and same arguments → stored result,
-  `IDEMPOTENT_REPLAY` entry, no forwarding; same key and other arguments → `IDEMPOTENCY_CONFLICT`.
-- Result size limit (`aduana.limits.max-result-bytes`).
-- stdio connector: allow-listed commands from configuration, clean environment, restart with backoff,
-  newline-delimited JSON-RPC over stdin/stdout; a fourth demo server run over stdio
-  (`serveStdio` exists in `@modelcontextprotocol/server`). `upstream_server.transport` already allows `stdio`.
+Next is Phase 9, the console (plan §8, Phase 9): Angular, served by the gateway, over the existing
+`/api/v1` endpoints (catalog, identity, policy, audit, approvals, `/api/v1/events` SSE). Read plan §8
+first; the API is listed in `web/api/`.
 
 ## Known traps
 
@@ -71,3 +72,6 @@ Next is Phase 8, limits, idempotency and stdio (plan §5.8):
 - Audit entries are rebuilt from columns for export: any new field must be added to `AuditRepository.FIELDS`,
   `insert` and `map`, and to `docs/audit-format.md` and `verifier/`.
 - `make bench-policy` skips JaCoCo because the coverage check would fail on the benchmark alone.
+- `@Value` cannot bind an indexed list (`x[0]`); stdio's allow-list is one comma-separated property.
+- Spring's String-to-URI conversion of `aduana.upstreams[*].endpoint` percent-encodes `%`: in YAML write
+  stdio arguments unencoded (`stdio:/usr/bin/node?arg=/app/server.js`); through the API send a valid URI.
