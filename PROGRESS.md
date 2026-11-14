@@ -9,7 +9,7 @@
 | 4 | Policy engine | done |
 | 5 | Verifiable log | done |
 | 6 | Approvals | done |
-| 7 | Redaction, injection flags and taint | not started |
+| 7 | Redaction, injection flags and taint | done |
 | 8 | Limits, idempotency and stdio servers | not started |
 | 9 | Console | not started |
 | 10 | Simulation and replay | not started |
@@ -162,3 +162,21 @@ Done on branch `phase-06-approvals`, merged into `main`.
 | CA6.5 a new policy invalidates pending approvals of the old bundle | met: `loading_a_new_policy_invalidates_the_pending_approvals_of_the_old_one` (409 on approve, `APPROVAL_EXPIRED` with `POLICY_CHANGED`) |
 | hold mode | met: `a_call_is_held_and_goes_ahead_when_finance_approves_during_the_hold` |
 | e2e | met: `make e2e` approves the held refund as `finance@example.com`; the retry executes once and the next identical retry needs a new approval, in both protocol eras |
+
+## Phase 7: Redaction, injection marks and untrusted data
+
+Done on branch `phase-07-inspection`, merged into `main`.
+
+- Tests first (`DetectorsTest` 6, `InspectionTest` 8, labelled set of 120 texts): `e604683`.
+- `inspection/` (detectors with validity checks, redactor with opaque and hinted styles, injection
+  scanner over `injection-patterns.yaml` v1, traceable values, taint service), `V5__inspection.sql`,
+  obligations applied in the pipeline, description marks at sync: `1b28d71`.
+- `injected-small-refund.yaml` in `make e2e`, `scripts/check_log_secrets.py` in `make audit-verify`: `d2f5db6`.
+- `docs/detectors.md` (measured table), ADR 10, ADR 19, `docs/audit-format.md` flags: `45114fe`.
+
+| CA | Result |
+|---|---|
+| CA7.1 each detector has positives and near negatives; precision and recall published | met: `docs/detectors.md`, recomputed by `the_published_precision_and_recall_are_the_measured_ones`; all recall 1.00, precision 1.00 except `phone_es` 0.91 (one false alarm, explained) |
+| CA7.2 an attacker IBAN from `fetch_url` used in `refund` goes to approval with `FLOW_FROM_UNTRUSTED` and the source `seq` | met: `an_iban_copied_from_an_untrusted_page_into_a_payment_needs_approval_and_says_where_it_came_from`, and `make e2e` (`injected-small-refund.yaml`: refund of 4 999 cents → `APPROVAL_PENDING`; entry flags `FLOW_FROM_UNTRUSTED`, `TAINT_SOURCE:$.destination_iban:seq=25`) |
+| CA7.3 the log never holds a sensitive value in clear | met: `the_log_never_holds_a_sensitive_value_in_clear`, and `make audit-verify` on a fresh stack after `make e2e`: `check_log_secrets: 72 entries, 0 values in clear` |
+| CA7.4 the database holds no untrusted values in clear, only hashes | met: `the_taint_table_holds_hashes_only` |
