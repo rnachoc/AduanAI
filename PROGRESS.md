@@ -3,7 +3,7 @@
 | Phase | Name | State |
 |---|---|---|
 | 0 | Foundations | done |
-| 1 | Demo environment | not started |
+| 1 | Demo environment | done |
 | 2 | Transparent proxy | not started |
 | 3 | Identity and catalog | not started |
 | 4 | Policy engine | not started |
@@ -38,3 +38,18 @@ Acceptance criteria (evidence in `docs/evidence/phase-00.md`):
 | CA0.5 ADR 1 lists versions and protocol facts with URL and date | met |
 | CA0.6 `docs/comparison.md` cites a source per claim | met |
 | CI green | not verified: nothing pushed (pushing needs the owner) |
+
+## Phase 1: Demo environment
+
+Done on branch `phase-01-demo`, merged into `main`.
+
+- TypeScript project with the official MCP SDK 2.4.0: `489ae78`. Dependencies recorded in ADR 16.
+- Contract tests for the three servers, the agent and the synthetic data, written first: `f77e29b`.
+- `crm`, `payments`, `webfetch` servers: `e97088b`. Scripted agent and two scenarios: `f370a2b`.
+- Demo image and compose services, `make test-demo`, `make demo-direct`: `447b257`. `demo/README.md`: `fab624a`.
+
+| CA | Result |
+|---|---|
+| CA1.1 the three servers answer `server/discover`, `tools/list`, `tools/call` per 2026-07-28 | met: `demo/test/contract.test.ts`, 11 tests, raw JSON-RPC with the required headers and `_meta` |
+| CA1.2 `demo/agent` runs a scenario straight against the servers and every step passes | met: `demo/test/scenarios.test.ts` and `make demo-direct` on the running stack (9 of 9 steps) |
+| CA1.3 no data looks real | met: `example.com` mail, `XX` IBANs, `000` phones; enforced by three tests; documented in `demo/README.md` |
