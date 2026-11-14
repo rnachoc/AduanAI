@@ -96,9 +96,10 @@ audit-export: ## Export the running gateway's log, checkpoints and key to out/au
 	$(MAVEN) -pl cli -am -DskipTests -Djacoco.skip=true package
 	docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src -w /src $(JDK_IMAGE) 		java -jar cli/target/aduana-cli.jar audit export --url http://gateway:8080 		-o out/audit/entries.jsonl --checkpoints-out out/audit/checkpoints.jsonl --key-out out/audit/key.json
 
-audit-verify: audit-export ## Verify the running gateway's log with both verifiers
+audit-verify: audit-export ## Verify the running gateway's log with both verifiers and scan it for values in clear
 	$(CLI) audit verify --export out/audit/entries.jsonl --checkpoints out/audit/checkpoints.jsonl --key out/audit/key.json
 	$(RUN) $(PYTHON_IMAGE) python verifier/verify_chain.py out/audit/entries.jsonl --checkpoints out/audit/checkpoints.jsonl
+	$(RUN) $(PYTHON_IMAGE) python scripts/check_log_secrets.py out/audit/entries.jsonl
 
 test-cli: ## Test the aduana command line
 	$(MAVEN) -pl cli -am verify
