@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +40,7 @@ public class AuditLog {
   private final SigningKeys keys;
   private final JsonMapper json;
   private final Clock clock;
+  private final ApplicationEventPublisher events;
   private final long checkpointEvery;
 
   /**
@@ -57,6 +59,7 @@ public class AuditLog {
    * @param keys checkpoint keys
    * @param json the shared JSON mapper
    * @param clock the clock
+   * @param events publishes appended entries to the activity stream
    * @param checkpointEvery sign a checkpoint after this many entries
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
@@ -65,11 +68,13 @@ public class AuditLog {
       SigningKeys keys,
       JsonMapper json,
       Clock clock,
+      ApplicationEventPublisher events,
       @Value("${aduana.audit.checkpoint-every:100}") long checkpointEvery) {
     this.repository = repository;
     this.keys = keys;
     this.json = json;
     this.clock = clock;
+    this.events = events;
     this.checkpointEvery = checkpointEvery;
   }
 
@@ -85,6 +90,33 @@ public class AuditLog {
    */
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Appended append(UUID tenantId, AuditRecord record) {
+    return appendLocked(tenantId, record);
+  }
+
+  /**
+   * Appends an entry inside the caller's transaction, so the entry and the caller's other writes
+   * commit together or not at all (an approval is consumed only if its use is recorded).
+   *
+   * @param tenantId the tenant
+   * @param record what to record
+   * @return the entry's seq and hash
+   * @throws org.springframework.transaction.IllegalTransactionStateException without a transaction
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Appended appendWithin(UUID tenantId, AuditRecord record) {
+    return appendLocked(tenantId, record);
+  }
+
+  /**
+   * Takes the tenant lock, appends, and signs a checkpoint when one is due.
+   *
+   * @param tenantId the tenant
+   * @param record what to record
+   * @return the entry's seq and hash
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Appended appendLocked(UUID tenantId, AuditRecord record) {
     repository.lock(tenantId);
     Optional<AuditRepository.Head> head = repository.head(tenantId);
     Appended appended = insert(tenantId, record, head);
@@ -203,6 +235,14 @@ public class AuditLog {
     entry.put("prev_hash", head.map(AuditRepository.Head::hash).orElse(HashChain.GENESIS));
     entry.put("hash", HashChain.hash(entry));
     repository.insert(entry);
+    events.publishEvent(
+        new AuditAppended(
+            seq,
+            entry.get("ts").asString(),
+            record.type(),
+            record.tool().orElse(null),
+            record.decision().orElse(null),
+            record.reasonCode().orElse(null)));
     return new Appended(seq, entry.get("hash").asString());
   }
 

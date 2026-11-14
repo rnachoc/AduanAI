@@ -51,12 +51,14 @@ public class ConsoleUserService {
    * @param email the sign-in address
    * @param password the password, at least 10 characters
    * @param role the role
+   * @param groups the groups the user's principal belongs to, such as approver groups
    * @return the new user
    * @throws IllegalArgumentException if the password is too short or the address is taken
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   @Transactional
-  public ConsoleUser create(UUID tenantId, String email, String password, ConsoleUser.Role role) {
+  public ConsoleUser create(
+      UUID tenantId, String email, String password, ConsoleUser.Role role, List<String> groups) {
     if (password.length() < MINIMUM_PASSWORD_LENGTH) {
       throw new IllegalArgumentException("Passwords need at least 10 characters");
     }
@@ -67,15 +69,24 @@ public class ConsoleUserService {
     // The principal name derives from the id, not the e-mail, so any valid address fits its
     // pattern.
     Principal principal =
-        principals.create(
-            tenantId,
-            Principal.Kind.USER,
-            "user-" + userId,
-            Map.of(),
-            List.of(role.name().toLowerCase(Locale.ROOT)));
+        principals.create(tenantId, Principal.Kind.USER, "user-" + userId, Map.of(), groups);
     ConsoleUser user = new ConsoleUser(tenantId, userId, principal.id(), email, role);
     users.insert(user, encoder.encode(password), clock.instant());
     return user;
+  }
+
+  /**
+   * Creates a console user whose only group is its role's name.
+   *
+   * @param tenantId the tenant
+   * @param email the sign-in address
+   * @param password the password
+   * @param role the role
+   * @return the new user
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public ConsoleUser create(UUID tenantId, String email, String password, ConsoleUser.Role role) {
+    return create(tenantId, email, password, role, List.of(role.name().toLowerCase(Locale.ROOT)));
   }
 
   /**
