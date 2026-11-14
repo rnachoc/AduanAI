@@ -37,7 +37,16 @@ supports them), credentials for stdio servers (none is injected), and the `notes
 gateway in `compose.yaml` because the gateway image has no Node.js; its stdio contract is tested in
 `demo/test/stdio.test.ts` and the gateway's stdio path in `StdioTest` with a Java fake.
 
-Next is Phase 9, the console (plan §8, Phase 9): Angular, served by the gateway, over the existing
+Phase 9 is in progress on branch `phase-09-console` (not merged). Done: the gateway serves
+`ADUANA_CONSOLE_DIRECTORY` with a same-origin CSP (`ConsoleServingTest`), and `/audit/verify` returns the
+last checkpoint. In the working tree, not committed: `console/` (Angular 22.2.6, hash routing, six screens
+in `src/app/pages/`, `api.ts`, `auth.ts`, `diff.ts`, `styles.css`, IBM Plex Sans under OFL in
+`public/fonts/`). Left: pin `console/package.json` versions, `angular.json` with `inlineCritical: false`,
+unit tests (70 % coverage), ESLint, Playwright flows and axe (image
+`mcr.microsoft.com/playwright:v1.65.1-noble`, pin its digest), ADR for console dependencies, the
+console build stage in `Dockerfile`, `make demo`, screenshots, then Phases 11, 12 and 10.
+
+Original Phase 9 notes: the console (plan §8, Phase 9): Angular, served by the gateway, over the existing
 `/api/v1` endpoints (catalog, identity, policy, audit, approvals, `/api/v1/events` SSE). Read plan §8
 first; the API is listed in `web/api/`.
 
