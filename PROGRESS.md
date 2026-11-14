@@ -4,7 +4,7 @@
 |---|---|---|
 | 0 | Foundations | done |
 | 1 | Demo environment | done |
-| 2 | Transparent proxy | not started |
+| 2 | Transparent proxy | done |
 | 3 | Identity and catalog | not started |
 | 4 | Policy engine | not started |
 | 5 | Verifiable log | not started |
@@ -53,3 +53,20 @@ Done on branch `phase-01-demo`, merged into `main`.
 | CA1.1 the three servers answer `server/discover`, `tools/list`, `tools/call` per 2026-07-28 | met: `demo/test/contract.test.ts`, 11 tests, raw JSON-RPC with the required headers and `_meta` |
 | CA1.2 `demo/agent` runs a scenario straight against the servers and every step passes | met: `demo/test/scenarios.test.ts` and `make demo-direct` on the running stack (9 of 9 steps) |
 | CA1.3 no data looks real | met: `example.com` mail, `XX` IBANs, `000` phones; enforced by three tests; documented in `demo/README.md` |
+
+## Phase 2: Transparent proxy
+
+Done on branch `phase-02-proxy`, merged into `main`.
+
+- Tests first: `ProxyEndpointTest` (15 cases), `ToolNameTest`, fake upstream and raw MCP test client: `f46785f`.
+- Checkstyle 14 so `switch` guards parse: `c48da3f`.
+- `POST /mcp` with the 2026-07-28 envelope, `server/discover`, `tools/list`, `tools/call`, 2025-11-25
+  `initialize`, upstream client (JSON and SSE answers, cancellation on timeout), `<server>__<tool>`
+  names, size limits, error codes: `c23f1b3`.
+- Upstreams configured by file (`deploy/upstreams.demo.yaml`), `make e2e`, CI step: `a7d3c73`. ADR 17: `e2fcd43`.
+
+| CA | Result |
+|---|---|
+| CA2.1 the Phase 1 scenarios pass unchanged through Aduana | met: `make e2e`, 9 of 9 steps in 2026-07-28 mode and 9 of 9 with the SDK's 2025-11-25 handshake |
+| CA2.2 down upstream gives `UPSTREAM_ERROR`, slow one `UPSTREAM_TIMEOUT`, no hanging threads | met: `an_upstream_that_is_down_gives_upstream_error`, `a_slow_upstream_gives_upstream_timeout_and_leaves_nothing_in_flight` (10 parallel calls to a 5 s upstream with a 400 ms timeout return within 3 s and leave 0 requests in flight) |
+| CA2.3 arguments over N bytes are refused before forwarding | met: `oversized_arguments_are_refused_before_anything_is_forwarded` (upstream call count unchanged) |
