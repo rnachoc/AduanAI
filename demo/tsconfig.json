@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es2024",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "sourceMap": false
+  },
+  "include": ["servers/**/*.ts", "agent/**/*.ts", "test/**/*.ts"]
+}

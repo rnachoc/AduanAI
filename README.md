@@ -23,7 +23,7 @@ make test    # every test suite
 | Phase | Name | State |
 |---|---|---|
 | 0 | Foundations | done |
-| 1 | Demo environment | not started |
+| 1 | Demo environment | done |
 | 2 | Transparent proxy | not started |
 | 3 | Identity and catalog | not started |
 | 4 | Policy engine | not started |

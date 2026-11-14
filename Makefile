@@ -22,9 +22,11 @@ MAVEN := docker run --rm -v "$(CURDIR)":/src -v aduana-m2:/root/.m2 \
 	-w /src $(JDK_IMAGE) ./mvnw -B -q
 PYTHON := $(RUN) $(PYTHON_IMAGE) python
 LINT := $(RUN) $(SAFE_GIT) $(LINT_IMAGE)
+NODE := docker run --rm -v "$(CURDIR)":/src -v aduana-npm:/root/.npm -w /src/demo $(NODE_IMAGE)
+DIRECT_URLS := crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway hooks secrets
+	test-policy test-audit test-gateway test-demo demo-direct hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -58,6 +60,7 @@ lint: lint-image ## Run every static check: authorship, commits, formats, secret
 	$(RUN) $(SAFE_GIT) $(GITLEAKS_IMAGE) git --redact --no-banner /src
 	sh scripts/check_licenses.sh
 	$(MAVEN) spotless:check checkstyle:check
+	$(NODE) sh -c 'npm ci --no-audit --no-fund --loglevel=error && npm run --silent lint'
 
 lint-fast: ## Secrets in the staged diff and authorship of staged files (the pre-commit hook)
 	sh scripts/lint_fast.sh
@@ -65,7 +68,7 @@ lint-fast: ## Secrets in the staged diff and authorship of staged files (the pre
 secrets: ## Scan the whole git history for secrets
 	$(RUN) $(SAFE_GIT) $(GITLEAKS_IMAGE) git --redact --no-banner /src
 
-test: test-scripts test-java ## Run every test suite
+test: test-scripts test-java test-demo ## Run every test suite
 
 test-scripts: ## Test the repository scripts
 	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py'
@@ -81,6 +84,13 @@ test-audit: ## Test the audit module
 
 test-gateway: ## Test the gateway and the modules it depends on
 	$(MAVEN) -pl gateway -am verify
+
+test-demo: ## Contract-test the demo MCP servers and the scripted agent
+	$(NODE) sh -c 'npm ci --no-audit --no-fund --loglevel=error && npm test'
+
+demo-direct: ## Run the scenarios straight against the demo servers, without Aduana
+	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
+	$(COMPOSE) run --rm agent --direct $(DIRECT_URLS) scenarios/support-happy-path.yaml scenarios/injected-refund-direct.yaml
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks
