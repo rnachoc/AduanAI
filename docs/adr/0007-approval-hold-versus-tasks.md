@@ -37,3 +37,12 @@ Support for the Tasks extension, for clients that declare it, is future work.
 
 MRTR elicitation: rejected (the model would see and answer the approval prompt). Tasks only: rejected
 because few clients support it.
+
+## Implementation (Phase 6)
+
+`ApprovalService.obtain` reuses the newest approval with the same binding hash while it is usable,
+otherwise creates one (`APPROVAL_CREATED`), then holds the request, re-reading the row every 500 ms and
+waking at once on a decision made on this node. `aduana.approvals.hold-timeout` is 60 s by default and 3 s
+in the demo stack. Consumption is `UPDATE … WHERE state = 'approved' AND expires_at > now RETURNING`, in the
+same transaction as the `CALL_DECIDED` entry (`AuditLog.appendWithin`). Approvers must be console users
+whose principal is in the rule's `approvers_group`; there is no separation of duties in v1.
