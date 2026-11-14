@@ -2,6 +2,7 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.policy;
 
+import io.github.rnachoc.aduana.gateway.approval.ApprovalService;
 import io.github.rnachoc.aduana.gateway.catalog.CatalogService;
 import io.github.rnachoc.aduana.gateway.catalog.CatalogTool;
 import io.github.rnachoc.aduana.gateway.events.EventLog;
@@ -38,6 +39,7 @@ public class PolicyService {
   private final PolicyRepository repository;
   private final CatalogService catalog;
   private final EventLog events;
+  private final ApprovalService approvals;
   private final Clock clock;
   private final Map<UUID, PolicyBundle> active = new ConcurrentHashMap<>();
 
@@ -73,14 +75,20 @@ public class PolicyService {
    * @param repository bundle storage
    * @param catalog tool schemas for the type check
    * @param events the event log
+   * @param approvals expires approvals the new bundle makes obsolete
    * @param clock the clock
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public PolicyService(
-      PolicyRepository repository, CatalogService catalog, EventLog events, Clock clock) {
+      PolicyRepository repository,
+      CatalogService catalog,
+      EventLog events,
+      ApprovalService approvals,
+      Clock clock) {
     this.repository = repository;
     this.catalog = catalog;
     this.events = events;
+    this.approvals = approvals;
     this.clock = clock;
   }
 
@@ -117,6 +125,7 @@ public class PolicyService {
     }
     repository.activate(tenantId, bundle.sha256(), source, actorId, clock.instant());
     active.put(tenantId, bundle);
+    approvals.supersede(tenantId, bundle.sha256());
     events.record(
         tenantId,
         new EventLog.Event(

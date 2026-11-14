@@ -47,6 +47,7 @@ import tools.jackson.databind.node.ObjectNode;
     properties = {
       "aduana.master-key=local-only",
       "aduana.catalog.sync-interval=PT1H",
+      "aduana.approvals.hold-timeout=PT1S",
       "aduana.policy.directory=src/test/resources/policies/pipeline"
     })
 @Import(TestDatabase.class)

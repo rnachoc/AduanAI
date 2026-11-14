@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+version: 1
+defaults:
+  decision: deny
+rules:
+  - id: payments-need-finance
+    match:
+      tool: { server: bank, name: pay }
+    effect: require_approval
+    approval: { approvers_group: finance, expires_in: 14m }
+  - id: quick-approvals-expire-fast
+    match:
+      tool: { server: bank, name: quick }
+    effect: require_approval
+    approval: { approvers_group: finance, expires_in: 4s }

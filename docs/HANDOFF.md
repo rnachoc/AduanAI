@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 5.
+Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 6.
 
 ## What exists
 
@@ -24,23 +24,26 @@ Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 5.
 
 ## What is left
 
-Phases 6 to 12 of `docs/PLAN.md` §10. Phase 5 added the `audit` module, `V3__audit_log.sql`, the
-`gateway/audit` package (`AuditLog`, `AuditRepository`, `SigningKeys`, `CheckpointScheduler`), the chained
-`EventLog`, `aduana audit verify|export`, `verifier/` and `docs/audit-format.md`.
+Phases 7 to 12 of `docs/PLAN.md` §10. Phase 6 added `approval/` (service, repository), `V4__approval.sql`,
+`/api/v1/approvals*`, `/api/v1/users`, `/api/v1/events` (SSE fed by `AuditAppended` events),
+`scripts/demo_approve.py`, `scripts/e2e_round.sh`.
 
-Next is Phase 6, approvals (plan §5.4, ADR 7 chose `hold`):
+Next is Phase 7, redaction, injection marks and taint (plan §5.6, §5.7):
 
-- `V4__approval.sql`: `approval` table of §5.9 plus `policy_bundle_hash`; grant DML to `aduana_app`.
-- `binding_hash = SHA-256(tenant_id || principal_id || tool || args_hash || policy_bundle_hash)`.
-- In `ToolCallService`, `REQUIRE_APPROVAL`: find a reusable approval by binding hash (approved and unused →
-  consume atomically with `UPDATE … WHERE state='approved' RETURNING` in the same transaction as the
-  `CALL_DECIDED` append; pending → wait), else create one (`APPROVAL_CREATED`), then hold up to
-  `aduana.approvals.hold-timeout` (60 s) polling or waiting on a signal; answer `APPROVAL_PENDING` with
-  `approval_id`, or `APPROVAL_REJECTED`.
-- `GET /api/v1/approvals?state=`, `POST /api/v1/approvals/{id}/approve|reject` (approver role; the
-  approver must be in `approvers_group`; agents can never approve), expiry job (`APPROVAL_EXPIRED`),
-  `GET /api/v1/events` SSE.
-- The demo seed must create approver users (finance, support-leads, security groups).
+- `gateway/.../inspection/`: detectors `email`, `phone_es`, `dni_nie` (control letter), `iban` (mod 97),
+  `card` (Luhn), `secret` (patterns + entropy); `docs/detectors.md` with precision and recall measured on a
+  labelled set in test resources.
+- Apply obligations in `ToolCallService`: `deny_args_containing` before the decision is recorded,
+  `flag_args_containing` as flags, `redact_result` on the upstream result; store `args_redacted` redacted
+  in `CALL_DECIDED` and approvals (the hash stays over the originals).
+- Injection patterns in `gateway/src/main/resources/injection-patterns.yaml`: flag (`INJECTION_PATTERN`) and
+  wrap results, never block; also scan tool descriptions at sync.
+- Taint: `V5__taint.sql` (`taint_token` with value hashes only), extract URLs, e-mails, IBANs, numbers of
+  more than 8 digits and strings of 24+ characters from results of `untrusted_source` tools; in step 5 set
+  `flow_from_untrusted` (with the source `seq`) and `context_tainted` in `CallContext.ContextFacts` instead of
+  `CLEAN`; `trace_key` from `_meta.traceparent`.
+- CA7.2 demo: the agent fetches `blog.example.com/refund-tips` then refunds a small amount to the attacker
+  IBAN: approval with `FLOW_FROM_UNTRUSTED` and the source `seq` in the entry.
 
 ## Known traps
 

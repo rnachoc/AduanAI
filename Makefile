@@ -127,10 +127,8 @@ demo-direct: ## Run the scenarios straight against the demo servers, without Adu
 
 e2e: ## Run the scenarios through the gateway, in 2026-07-28 and in 2025-11-25 mode
 	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
-	KEY=$$($(SEED)) && \
-	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --gateway $(GATEWAY_MCP) $(GATEWAY_SCENARIOS) && \
-	$(COMPOSE) up -d --wait --force-recreate payments && \
-	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --legacy --gateway $(GATEWAY_MCP) $(GATEWAY_SCENARIOS)
+	KEY=$$($(SEED)) && sh scripts/e2e_round.sh "$$KEY" && \
+	$(COMPOSE) up -d --wait --force-recreate payments && sh scripts/e2e_round.sh "$$KEY" --legacy
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks

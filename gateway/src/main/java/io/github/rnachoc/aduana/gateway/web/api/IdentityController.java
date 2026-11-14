@@ -4,6 +4,7 @@ package io.github.rnachoc.aduana.gateway.web.api;
 
 import io.github.rnachoc.aduana.gateway.identity.ApiKey;
 import io.github.rnachoc.aduana.gateway.identity.ConsoleUser;
+import io.github.rnachoc.aduana.gateway.identity.ConsoleUserService;
 import io.github.rnachoc.aduana.gateway.identity.Principal;
 import io.github.rnachoc.aduana.gateway.identity.PrincipalService;
 import java.time.Duration;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class IdentityController {
 
   private final PrincipalService principals;
+  private final ConsoleUserService users;
 
   /**
    * A new principal.
@@ -98,10 +100,12 @@ public class IdentityController {
    * Creates the controller.
    *
    * @param principals the principal service
+   * @param users creates console users
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public IdentityController(PrincipalService principals) {
+  public IdentityController(PrincipalService principals, ConsoleUserService users) {
     this.principals = principals;
+    this.users = users;
   }
 
   /**
@@ -138,6 +142,44 @@ public class IdentityController {
             Optional.ofNullable(body.name()).orElse(""),
             Optional.ofNullable(body.attributes()).orElse(Map.of()),
             Optional.ofNullable(body.groups()).orElse(List.of())));
+  }
+
+  /**
+   * A new console user.
+   *
+   * @param email the sign-in address
+   * @param password the password, at least 10 characters
+   * @param role admin, approver or viewer
+   * @param groups approver groups such as finance; the role's name when absent
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public record UserBody(String email, String password, String role, List<String> groups) {}
+
+  /**
+   * Creates a console user.
+   *
+   * @param user the signed-in administrator
+   * @param body the new user
+   * @return the user's address and role
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  @PostMapping("/users")
+  @ResponseStatus(HttpStatus.CREATED)
+  public Map<String, String> createUser(
+      @AuthenticationPrincipal ConsoleUser user, @RequestBody UserBody body) {
+    ConsoleUser.Role role =
+        ConsoleUser.Role.valueOf(
+            Optional.ofNullable(body.role()).orElse("viewer").toUpperCase(Locale.ROOT));
+    List<String> groups =
+        Optional.ofNullable(body.groups()).orElse(List.of(role.name().toLowerCase(Locale.ROOT)));
+    ConsoleUser created =
+        users.create(
+            user.tenantId(),
+            Optional.ofNullable(body.email()).orElse(""),
+            Optional.ofNullable(body.password()).orElse(""),
+            role,
+            groups);
+    return Map.of("email", created.email(), "role", created.role().name().toLowerCase(Locale.ROOT));
   }
 
   /**

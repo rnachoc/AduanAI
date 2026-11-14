@@ -2,6 +2,7 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.service;
 
+import io.github.rnachoc.aduana.gateway.approval.ApprovalService;
 import io.github.rnachoc.aduana.gateway.audit.AuditLog;
 import io.github.rnachoc.aduana.gateway.audit.AuditRecord;
 import io.github.rnachoc.aduana.gateway.catalog.ArgumentValidator;
@@ -18,6 +19,7 @@ import io.github.rnachoc.aduana.gateway.upstream.UpstreamServer;
 import io.github.rnachoc.aduana.policy.CallContext;
 import io.github.rnachoc.aduana.policy.Decision;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,8 +34,7 @@ import tools.jackson.databind.node.ObjectNode;
  * the pinned schema and size limit, ask the policy, forward with the injected credential, map
  * errors.
  *
- * <p>Approvals (Phase 6) and obligations such as redaction (Phase 7) are not applied yet: a call
- * that needs approval is answered `APPROVAL_PENDING` and never forwarded.
+ * <p>Obligations such as redaction (Phase 7) are not applied yet.
  *
  * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
  */
@@ -47,6 +48,7 @@ public class ToolCallService {
   private final ArgumentValidator validator;
   private final PolicyService policies;
   private final AuditLog audit;
+  private final ApprovalService approvals;
   private final UpstreamClient upstreams;
   private final AgentErrors errors;
   private final JsonMapper json;
@@ -59,6 +61,7 @@ public class ToolCallService {
    * @param validator checks arguments against pinned schemas
    * @param policies decides calls with the active policy
    * @param audit records every decision before anything is forwarded
+   * @param approvals holds calls that need a person's approval
    * @param upstreams the upstream client
    * @param errors builds agent-facing errors
    * @param json the shared JSON mapper
@@ -70,6 +73,7 @@ public class ToolCallService {
       ArgumentValidator validator,
       PolicyService policies,
       AuditLog audit,
+      ApprovalService approvals,
       UpstreamClient upstreams,
       AgentErrors errors,
       JsonMapper json) {
@@ -78,6 +82,7 @@ public class ToolCallService {
     this.validator = validator;
     this.policies = policies;
     this.audit = audit;
+    this.approvals = approvals;
     this.upstreams = upstreams;
     this.errors = errors;
     this.json = json;
@@ -133,14 +138,19 @@ public class ToolCallService {
                 decided.bundleSha256())
             .flags(
                 decision.typeMismatches().isEmpty() ? List.of() : List.of("POLICY_TYPE_MISMATCH"));
-    if (!record(principal, intent)) {
-      return errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE);
-    }
-    if (decision instanceof Decision.Deny) {
-      return errors.toolResult(AgentErrorCode.POLICY_DENIED);
-    }
-    if (decision instanceof Decision.RequireApproval) {
-      return errors.toolResult(AgentErrorCode.APPROVAL_PENDING);
+    if (decision instanceof Decision.RequireApproval approval) {
+      Optional<JsonNode> refused =
+          awaitApproval(principal, offered, name, decided, approval, intent);
+      if (refused.isPresent()) {
+        return refused.get();
+      }
+    } else {
+      if (!record(principal, intent)) {
+        return errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE);
+      }
+      if (decision instanceof Decision.Deny) {
+        return errors.toolResult(AgentErrorCode.POLICY_DENIED);
+      }
     }
     ObjectNode forward = json.createObjectNode();
     forward.put("name", name.tool());
@@ -150,6 +160,62 @@ public class ToolCallService {
     UpstreamResponse response = upstreams.send(server, "tools/call", forward, offered.credential());
     long latency = (System.nanoTime() - started) / 1_000_000;
     return complete(principal, name, decided.bundleSha256(), server, response, latency);
+  }
+
+  /**
+   * Gets a person's approval for this exact call, or says why the call cannot go ahead yet.
+   *
+   * <p>When the approval is granted, it is consumed in the same transaction that records the call,
+   * so a granted approval authorises exactly one forwarded call.
+   *
+   * @param principal the caller
+   * @param offered the tool
+   * @param name the tool name
+   * @param decided the policy decision and its bundle
+   * @param approval the approval the policy asks for
+   * @param intent the `CALL_DECIDED` entry, without the approval id yet
+   * @return the error result to answer with, or empty when the call may be forwarded
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Optional<JsonNode> awaitApproval(
+      Principal principal,
+      CatalogService.OfferedTool offered,
+      ToolName name,
+      PolicyService.Decided decided,
+      Decision.RequireApproval approval,
+      AuditRecord.Builder intent) {
+    AuditRecord draft = intent.build();
+    ApprovalService.Outcome outcome;
+    try {
+      outcome =
+          approvals.obtain(
+              new ApprovalService.Request(
+                  principal,
+                  offered.tool(),
+                  name.qualified(),
+                  draft.argsHash().orElseThrow(),
+                  draft.argsRedacted().orElseThrow(),
+                  decided.bundleSha256(),
+                  approval,
+                  draft.flags()));
+    } catch (DataAccessException exception) {
+      LOG.error("approval could not be recorded, nothing forwarded");
+      return Optional.of(errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE));
+    }
+    Map<String, String> id = Map.of("approval_id", outcome.id().toString());
+    intent.approval(outcome.id());
+    if (outcome instanceof ApprovalService.Outcome.Approved
+        && approvals.consume(principal.tenantId(), outcome.id(), intent.build())) {
+      return Optional.empty();
+    }
+    boolean rejected = outcome instanceof ApprovalService.Outcome.Rejected;
+    intent.reason(rejected ? "APPROVAL_REJECTED" : "APPROVAL_PENDING");
+    if (!record(principal, intent)) {
+      return Optional.of(errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE));
+    }
+    return Optional.of(
+        errors.toolResult(
+            rejected ? AgentErrorCode.APPROVAL_REJECTED : AgentErrorCode.APPROVAL_PENDING, id));
   }
 
   /**

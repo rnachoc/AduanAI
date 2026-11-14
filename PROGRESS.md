@@ -8,7 +8,7 @@
 | 3 | Identity and catalog | done |
 | 4 | Policy engine | done |
 | 5 | Verifiable log | done |
-| 6 | Approvals | not started |
+| 6 | Approvals | done |
 | 7 | Redaction, injection flags and taint | not started |
 | 8 | Limits, idempotency and stdio servers | not started |
 | 9 | Console | not started |
@@ -141,3 +141,24 @@ Done on branch `phase-05-audit`, merged into `main`.
 | stack | met: `make audit-verify` on the demo stack: 84 entries, 2 checkpoints, intact in both verifiers, signatures checked |
 
 Coverage and mutation of `audit`: 95.91 % lines; PIT 91 of 100 mutants killed (91 %).
+
+## Phase 6: Approvals
+
+Done on branch `phase-06-approvals`, merged into `main`.
+
+- Tests first (`ApprovalTest`, 8 cases): `4b86e96`.
+- `V4__approval.sql`, `approval/ApprovalService` (binding hash over tenant, principal, tool, arguments
+  hash and bundle hash; reuse, hold with database re-checks, atomic consumption inside the same
+  transaction as the `CALL_DECIDED` entry, expiry job, supersession on policy load),
+  `/api/v1/approvals*`, `/api/v1/users`, `/api/v1/events` (SSE): `aa630c9`.
+- Demo approvers and the approve-and-retry round in `make e2e`: `fefecf4`.
+
+| CA | Result |
+|---|---|
+| CA6.1 an approval consumed by 20 parallel calls executes once | met: `twenty_parallel_retries_of_an_approved_call_execute_exactly_once` (1 success, upstream +1) |
+| CA6.2 changing one character of the arguments needs a new approval | met: `changing_one_character_of_the_arguments_needs_a_new_approval` (other payee and +1 cent both pending with a new id; the original then executes) |
+| CA6.3 an agent cannot approve, even with a valid key | met: `an_agent_key_cannot_approve_and_a_user_outside_the_group_is_refused` (agent key refused on the API, user outside the group gets 403) |
+| CA6.4 an expired approval does not execute and is recorded | met: `an_expired_approval_does_not_execute_and_its_expiry_is_recorded` (`APPROVAL_EXPIRED` entry) |
+| CA6.5 a new policy invalidates pending approvals of the old bundle | met: `loading_a_new_policy_invalidates_the_pending_approvals_of_the_old_one` (409 on approve, `APPROVAL_EXPIRED` with `POLICY_CHANGED`) |
+| hold mode | met: `a_call_is_held_and_goes_ahead_when_finance_approves_during_the_hold` |
+| e2e | met: `make e2e` approves the held refund as `finance@example.com`; the retry executes once and the next identical retry needs a new approval, in both protocol eras |
