@@ -30,7 +30,7 @@ make test    # every test suite
 | 5 | Verifiable log | done |
 | 6 | Approvals | done |
 | 7 | Redaction, injection flags and taint | done |
-| 8 | Limits, idempotency and stdio servers | not started |
+| 8 | Limits, idempotency and stdio servers | done |
 | 9 | Console | not started |
 | 10 | Simulation and replay | not started |
 | 11 | Attack bench, performance and reports | not started |

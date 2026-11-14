@@ -59,6 +59,12 @@ Types: `AUTH_FAILED`, `TOOL_NOT_FOUND`, `ARGS_INVALID`, `CALL_DECIDED`, `CALL_CO
 A call produces `CALL_DECIDED` (written and committed **before** anything is forwarded; if it cannot be
 written, the call is refused with `AUDIT_UNAVAILABLE`), then `CALL_COMPLETED` or `CALL_FAILED`.
 
+A call stopped by a limit produces `RATE_LIMITED` with `reason_code` `RATE_LIMITED` or `BUDGET_EXCEEDED`,
+and nothing else. A call answered from an idempotency key produces `IDEMPOTENT_REPLAY` (with the
+arguments' hash and redacted arguments); one whose key was used with other arguments produces
+`IDEMPOTENT_REPLAY` with `reason_code` `IDEMPOTENCY_CONFLICT`. A result over the size limit ends in
+`CALL_FAILED` with `reason_code` `RESULT_TOO_LARGE`.
+
 ## Hash
 
 ```
