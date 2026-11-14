@@ -2,6 +2,7 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.upstream;
 
+import io.github.rnachoc.aduana.gateway.catalog.Secret;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -9,6 +10,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -16,6 +19,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -32,6 +37,9 @@ import tools.jackson.databind.node.ObjectNode;
  */
 @Component
 public class UpstreamClient {
+
+  private static final Logger LOG = LoggerFactory.getLogger(UpstreamClient.class);
+  private static final int MAX_PAGES = 50;
 
   private final HttpClient http;
   private final JsonMapper json;
@@ -62,8 +70,25 @@ public class UpstreamClient {
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public UpstreamResponse send(UpstreamServer server, String method, ObjectNode params) {
+    return send(server, method, params, Optional.empty());
+  }
+
+  /**
+   * Sends one JSON-RPC request with the server's credential injected as a bearer token.
+   *
+   * <p>The credential comes from the catalog, never from the agent (principle 3).
+   *
+   * @param server the upstream
+   * @param method the JSON-RPC method
+   * @param params the parameters, without `_meta`
+   * @param credential the server's credential, if it has one
+   * @return the upstream's answer, or why there is none
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public UpstreamResponse send(
+      UpstreamServer server, String method, ObjectNode params, Optional<Secret> credential) {
     long id = nextId.getAndIncrement();
-    HttpRequest request = buildRequest(server, method, params, id);
+    HttpRequest request = buildRequest(server, method, params, id, credential);
     inFlight.incrementAndGet();
     CompletableFuture<HttpResponse<byte[]>> future =
         http.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray());
@@ -88,6 +113,33 @@ public class UpstreamClient {
   }
 
   /**
+   * Reads every page of a server's tool list.
+   *
+   * @param server the upstream
+   * @param credential the server's credential, if any
+   * @return the published tools, or empty when the server did not answer with a list
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public Optional<List<JsonNode>> listTools(UpstreamServer server, Optional<Secret> credential) {
+    List<JsonNode> tools = new ArrayList<>();
+    ObjectNode params = json.createObjectNode();
+    for (int page = 0; page < MAX_PAGES; page++) {
+      UpstreamResponse response = send(server, "tools/list", params, credential);
+      if (!(response instanceof UpstreamResponse.Result(JsonNode result))
+          || !result.path("tools").isArray()) {
+        LOG.warn("upstream {} did not list its tools: {}", server.name(), response);
+        return Optional.empty();
+      }
+      result.path("tools").forEach(tools::add);
+      if (!result.path("nextCursor").isString()) {
+        return Optional.of(tools);
+      }
+      params = json.createObjectNode().put("cursor", result.get("nextCursor").asString());
+    }
+    return Optional.of(tools);
+  }
+
+  /**
    * Returns how many upstream requests are waiting for an answer right now.
    *
    * @return the number of requests in flight
@@ -104,11 +156,16 @@ public class UpstreamClient {
    * @param method the JSON-RPC method
    * @param params the parameters
    * @param id the JSON-RPC id
+   * @param credential the bearer credential to inject, if any
    * @return the HTTP request
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   private HttpRequest buildRequest(
-      UpstreamServer server, String method, ObjectNode params, long id) {
+      UpstreamServer server,
+      String method,
+      ObjectNode params,
+      long id,
+      Optional<Secret> credential) {
     ObjectNode body = json.createObjectNode();
     body.put("jsonrpc", "2.0");
     body.put("id", id);
@@ -130,6 +187,7 @@ public class UpstreamClient {
     if (params.path("name").isString()) {
       builder.header(McpProtocol.HEADER_NAME, params.get("name").asString());
     }
+    credential.ifPresent(secret -> builder.header("Authorization", "Bearer " + secret.reveal()));
     return builder.build();
   }
 

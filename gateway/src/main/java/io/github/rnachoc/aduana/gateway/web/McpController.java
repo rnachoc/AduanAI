@@ -3,10 +3,12 @@
 package io.github.rnachoc.aduana.gateway.web;
 
 import io.github.rnachoc.aduana.gateway.config.AduanaProperties;
+import io.github.rnachoc.aduana.gateway.identity.Principal;
 import io.github.rnachoc.aduana.gateway.mcp.McpEnvelope;
 import io.github.rnachoc.aduana.gateway.mcp.McpException;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
 import io.github.rnachoc.aduana.gateway.mcp.McpRequest;
+import io.github.rnachoc.aduana.gateway.security.AgentAuthenticationFilter;
 import io.github.rnachoc.aduana.gateway.service.McpService;
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -50,6 +53,7 @@ public class McpController {
   /**
    * Handles one JSON-RPC message.
    *
+   * @param principal the agent the authentication filter resolved
    * @param body the request body, read up to the configured limit
    * @param protocolVersion the `MCP-Protocol-Version` header, if sent
    * @return the JSON-RPC response, or 202 for a notification
@@ -58,6 +62,7 @@ public class McpController {
    */
   @PostMapping
   public ResponseEntity<byte[]> post(
+      @RequestAttribute(AgentAuthenticationFilter.PRINCIPAL) Principal principal,
       InputStream body,
       @RequestHeader(name = McpProtocol.HEADER_PROTOCOL_VERSION, required = false)
           Optional<String> protocolVersion)
@@ -78,7 +83,8 @@ public class McpController {
       return ResponseEntity.status(HttpStatus.ACCEPTED).build();
     }
     try {
-      return json(200, envelope.result(request.id().orElseThrow(), service.handle(request)));
+      return json(
+          200, envelope.result(request.id().orElseThrow(), service.handle(principal, request)));
     } catch (McpException exception) {
       int status = request.era() == McpRequest.Era.MODERN ? exception.httpStatus() : 200;
       return json(status, envelope.error(request.id(), exception));
