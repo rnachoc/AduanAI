@@ -1,0 +1,14 @@
+target/
+node_modules/
+dist/
+.angular/
+*.class
+*.log
+.env
+.idea/
+.vscode/
+*.iml
+__pycache__/
+.ruff_cache/
+.DS_Store
+/out/

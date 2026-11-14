@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+extends: default
+ignore: |
+  **/node_modules/
+  **/target/
+  **/dist/
+rules:
+  line-length:
+    max: 140
+  document-start: disable
+  truthy:
+    allowed-values: ["true", "false", "on"]
+  comments:
+    min-spaces-from-content: 1

@@ -1,0 +1,10 @@
+Aduana
+Copyright 2026 Ignacio Rodríguez Caro
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Aduana is an independent project. It is not affiliated with, endorsed by or
+sponsored by Anthropic or the Model Context Protocol project.
+
+Third-party components used at build time and run time, and their licences, are
+listed in docs/adr/0013-apache-2-licence-and-dependency-policy.md.
