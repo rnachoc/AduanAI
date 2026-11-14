@@ -6,7 +6,7 @@
 | 1 | Demo environment | done |
 | 2 | Transparent proxy | done |
 | 3 | Identity and catalog | done |
-| 4 | Policy engine | not started |
+| 4 | Policy engine | done |
 | 5 | Verifiable log | not started |
 | 6 | Approvals | not started |
 | 7 | Redaction, injection flags and taint | not started |
@@ -94,3 +94,25 @@ Done on branch `phase-03-identity-catalog`, merged into `main`.
 | e2e with keys | met: `make e2e` passes 18 of 18 steps with a seeded agent key |
 
 Not covered by a test yet: the optional OIDC JWT path (compiled and wired, no JWT issued in tests).
+
+## Phase 4: Policy engine
+
+Done on branch `phase-04-policy`, merged into `main`.
+
+- `policy` module, tests first: semantics (26), parser (12), tools (6), properties (2 × 1 000 cases),
+  architecture (1): `68b1d82`; build gates (JaCoCo 95 %, PIT 80 %): `ba46c10`; model, YAML parser with
+  JSON Schema, evaluator, bounded regex, type check, test runner: `1544527`.
+- `aduana policy validate|test`: `22faa3c`, `8217014`. Demo bundle (13 rules, 45 cases): `289b4e0`.
+- Gateway step 6 and `tools/list` filtering, `V2__policy_bundle.sql`, `GET/POST /api/v1/policy`, bundle
+  directory at start-up: `fb51d7a`, `02c0754` (and fix `ec82016`). Stack and gateway scenarios: `2e7d513`.
+- `docs/policy-reference.md`, ADR 5: `2221ad1`.
+
+| CA | Result |
+|---|---|
+| CA4.1 each point of §5.2 has a named test | met: `PolicySemanticsTest` (every rule evaluated, precedence, no match, obligations union, each comparator, paths and `[*]`/`any`, type mismatch, purity), `PolicyParserTest` (schema, duplicate ids, `defaults.decision`) |
+| CA4.2 adding a deny never relaxes a decision (1 000 cases) | met: `PolicyPropertiesTest.adding_a_deny_rule_never_relaxes_a_decision`, jqwik, 1 000 tries |
+| CA4.3 an invalid policy does not replace the active one | met: `PolicyPipelineTest.an_invalid_or_failing_bundle_never_replaces_the_active_one` (schema error, failing test case, type error; active hash unchanged) |
+| CA4.4 coverage ≥ 95 %, mutation ≥ 80 % in `policy` | met: 96.63 % lines (JaCoCo check in `verify`), 254 of 272 mutants killed = 93 % (`make mutation`) |
+| CA4.5 median under 1 ms with 200 rules | met: median 4.4 µs, p99 13.2 µs (`make bench-policy`, 20 000 samples, 12 CPUs, Java 25.0.5) |
+| demo bundle ≥ 12 rules and ≥ 40 cases | met: 13 rules, 45 cases, `make policy-test` 45 passed |
+| e2e | met: `make e2e` 20 of 20 steps in both eras; the injected refund is denied and never reaches payments |
