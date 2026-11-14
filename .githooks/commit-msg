@@ -1,0 +1,12 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# Rejects commit messages that break the rules in CLAUDE.md (format, tool credit).
+set -eu
+root=$(git rev-parse --show-toplevel)
+python=$(command -v python3 || command -v python || true)
+if [ -n "$python" ]; then
+  exec "$python" "$root/scripts/check_commits.py" "$1"
+fi
+export MSYS_NO_PATHCONV=1
+exec docker run --rm -v "$root":/src -w /src python:3.13-slim python scripts/check_commits.py "$1"
