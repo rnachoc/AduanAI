@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import check_commits as checker  # noqa: E402
+import check_commits as checker
 
 
 class MessageTests(unittest.TestCase):
@@ -62,7 +62,7 @@ class MessageTests(unittest.TestCase):
             "chore: wip",
             "fix: fix stuff",
             "chore: update",
-            "feat: add rocket \U0001F680",
+            "feat: add rocket \U0001f680",
         ):
             with self.subTest(subject=subject):
                 self.assertTrue(checker.check_message(subject + "\n"))

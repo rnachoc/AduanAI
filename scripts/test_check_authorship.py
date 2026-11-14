@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import check_authorship as checker  # noqa: E402
+import check_authorship as checker
 
 AUTHOR = "Ignacio Rodríguez Caro <rnachoccontact@gmail.com>"
 JAVA_HEADER = "// SPDX-License-Identifier: Apache-2.0\n// Copyright 2026 Ignacio Rodríguez Caro\n"
@@ -31,7 +31,7 @@ GOOD_JAVA = (
     + "package a;\n\nimport java.util.List;\n\n"
     + doc()
     + "public final class Good {\n"
-    + "  private final List<String> names = List.of(\"a\", \"b\");\n"
+    + '  private final List<String> names = List.of("a", "b");\n'
     + "  private final Runnable task = new Runnable() {\n"
     + "    @Override public void run() { }\n"
     + "  };\n\n"
@@ -39,11 +39,11 @@ GOOD_JAVA = (
     + "  public Good() { }\n\n"
     + doc()
     + "  private static <T> T first(List<T> items) {\n"
-    + "    String text = \"class Fake { void x() {} }\";\n"
+    + '    String text = "class Fake { void x() {} }";\n'
     + "    return items.get(0);\n"
     + "  }\n\n"
     + doc()
-    + "  enum Color { RED(\"r\"), GREEN(\"g\");\n"
+    + '  enum Color { RED("r"), GREEN("g");\n'
     + "    private final String code;\n"
     + doc()
     + "    Color(String code) { this.code = code; }\n"
@@ -53,7 +53,7 @@ GOOD_JAVA = (
     + "    public int x() { return x; }\n"
     + doc()
     + "    public Point {\n"
-    + "      if (x < 0) { throw new IllegalArgumentException(\"x\"); }\n"
+    + '      if (x < 0) { throw new IllegalArgumentException("x"); }\n'
     + "    }\n"
     + "  }\n\n"
     + doc()
@@ -142,8 +142,12 @@ class PythonTests(unittest.TestCase):
 
     GOOD = (
         PY_HEADER
-        + '"""Module.\n\nAuthor: ' + AUTHOR + '\n"""\n\n\n'
-        + 'def run() -> None:\n    """Runs.\n\n    Author: ' + AUTHOR + '\n    """\n'
+        + '"""Module.\n\nAuthor: '
+        + AUTHOR
+        + '\n"""\n\n\n'
+        + 'def run() -> None:\n    """Runs.\n\n    Author: '
+        + AUTHOR
+        + '\n    """\n'
     )
 
     def test_a_documented_module_passes(self) -> None:

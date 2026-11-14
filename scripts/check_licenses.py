@@ -25,7 +25,9 @@ ALLOWED = re.compile(
     re.IGNORECASE,
 )
 BLOCKED = re.compile(r"\bgpl|general public|sspl|server side public|business source|commons clause", re.IGNORECASE)
-DEPENDENCY_LINE = re.compile(r"^\s*([\w.\-]+):([\w.\-]+):[\w\-]+(?::[\w.\-]+)?:([\w.\-]+):(compile|runtime|provided|test|system)")
+DEPENDENCY_LINE = re.compile(
+    r"^\s*([\w.\-]+):([\w.\-]+):[\w\-]+(?::[\w.\-]+)?:([\w.\-]+):(compile|runtime|provided|test|system)"
+)
 
 
 def is_allowed(names: list[str]) -> bool:

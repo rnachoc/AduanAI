@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import check_licenses as checker  # noqa: E402
+import check_licenses as checker
 
 
 def write_pom(repository: Path, coordinates: str, body: str) -> None:
@@ -24,7 +24,8 @@ def write_pom(repository: Path, coordinates: str, body: str) -> None:
     group, artifact, version = coordinates.split(":")
     folder = repository / group.replace(".", "/") / artifact / version
     folder.mkdir(parents=True, exist_ok=True)
-    pom = f"<project><groupId>{group}</groupId><artifactId>{artifact}</artifactId><version>{version}</version>{body}</project>"
+    coordinates_xml = f"<groupId>{group}</groupId><artifactId>{artifact}</artifactId><version>{version}</version>"
+    pom = f"<project>{coordinates_xml}{body}</project>"
     (folder / f"{artifact}-{version}.pom").write_text(pom, encoding="utf-8")
 
 

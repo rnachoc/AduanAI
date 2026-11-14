@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+line-length = 120
+target-version = "py313"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "RUF", "ANN"]
+# Windows checkouts mark every file executable, so shebang rules would only report noise.
+ignore = ["EXE001", "EXE002"]

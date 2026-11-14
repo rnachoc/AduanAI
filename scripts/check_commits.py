@@ -21,7 +21,7 @@ SCOPES = "policy|audit|gateway|cli|console|demo|attacks|bench|verifier|deploy"
 SUBJECT = re.compile(rf"^(?:{TYPES})(?:\((?:{SCOPES})\))?: [a-z0-9`].*[^.\s]$")
 FORBIDDEN = ("co-authored-by", "generated with", "noreply@anthropic.com")
 VAGUE = re.compile(r"\b(wip|fix stuff)\b|^\w+(?:\([a-z]+\))?: (update|final)$", re.IGNORECASE)
-EMOJI = re.compile("[\U0001F000-\U0001FAFF☀-➿️]")
+EMOJI = re.compile("[\U0001f000-\U0001faff☀-➿️]")
 MAX_SUBJECT = 72
 
 

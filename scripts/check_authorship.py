@@ -236,7 +236,7 @@ def describe_typescript(header: str, frame: Frame | None) -> tuple[str | None, s
     if frame.kind != "type" or "(" not in clean:
         return None, "block"
     before_paren = clean.split("(", 1)[0]
-    if "=" in before_paren or "=>" in clean.split(")")[-1] and "=" in clean:
+    if "=" in before_paren or ("=>" in clean.split(")")[-1] and "=" in clean):
         return None, "block"
     name_match = METHOD_NAME.search(before_paren)
     name = name_match.group(1) if name_match else before_paren.strip()
