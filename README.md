@@ -25,7 +25,7 @@ make test    # every test suite
 | 0 | Foundations | done |
 | 1 | Demo environment | done |
 | 2 | Transparent proxy | done |
-| 3 | Identity and catalog | not started |
+| 3 | Identity and catalog | done |
 | 4 | Policy engine | not started |
 | 5 | Verifiable log | not started |
 | 6 | Approvals | not started |

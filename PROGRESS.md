@@ -5,7 +5,7 @@
 | 0 | Foundations | done |
 | 1 | Demo environment | done |
 | 2 | Transparent proxy | done |
-| 3 | Identity and catalog | not started |
+| 3 | Identity and catalog | done |
 | 4 | Policy engine | not started |
 | 5 | Verifiable log | not started |
 | 6 | Approvals | not started |
@@ -70,3 +70,27 @@ Done on branch `phase-02-proxy`, merged into `main`.
 | CA2.1 the Phase 1 scenarios pass unchanged through Aduana | met: `make e2e`, 9 of 9 steps in 2026-07-28 mode and 9 of 9 with the SDK's 2025-11-25 handshake |
 | CA2.2 down upstream gives `UPSTREAM_ERROR`, slow one `UPSTREAM_TIMEOUT`, no hanging threads | met: `an_upstream_that_is_down_gives_upstream_error`, `a_slow_upstream_gives_upstream_timeout_and_leaves_nothing_in_flight` (10 parallel calls to a 5 s upstream with a 400 ms timeout return within 3 s and leave 0 requests in flight) |
 | CA2.3 arguments over N bytes are refused before forwarding | met: `oversized_arguments_are_refused_before_anything_is_forwarded` (upstream call count unchanged) |
+
+## Phase 3: Identity and catalog
+
+Done on branch `phase-03-identity-catalog`, merged into `main`.
+
+- Tests first (`IdentityAndCatalogTest` 10, `RouteAccessTest` 3, `CatalogUnitTest` 6; Phase 2 tests now
+  authenticate and run on PostgreSQL through Testcontainers): `54fe46b`.
+- Dependencies (JDBC, Flyway, Spring Security, OAuth2 resource server, json-schema-validator, BouncyCastle)
+  and migration `V1__identity_and_catalog.sql`: `8f61677`.
+- API keys, optional OIDC JWT, console users with Argon2id, sessions with CSRF, catalog with pinned
+  definitions and review states, AES-GCM credentials injected towards upstreams, JSON Schema validation,
+  REST API with `RouteAccess`: `9de2ebd`. DNS re-resolution fix: `ce29fe3`.
+- Demo seeding through the API and authenticated e2e: `7b75ab2`. ADR 18: `313349a`.
+
+| CA | Result |
+|---|---|
+| CA3.1 no credential gives 401 and an entry | met: `a_call_without_a_credential_is_401_and_recorded` (event `AUTH_FAILED` in `event_log`) |
+| CA3.2 "does not exist" and "no access" are indistinguishable | met: `a_missing_tool_and_a_disabled_tool_look_the_same_in_body_and_time` (identical bodies; medians of 40 calls differ by less than 10 ms) |
+| CA3.3 a changed description leaves `tools/list` until an admin reviews it | met: `a_changed_description_hides_the_tool_until_an_administrator_accepts_it` (fake upstream; the demo servers' descriptions are fixed) |
+| CA3.4 the upstream credential never appears in logs, responses or the database in clear | met: `the_upstream_credential_never_appears_in_responses_logs_or_the_database` (captured output, API bodies, every table dumped as text) |
+| CA3.5 a REST route without a `RouteAccess` row fails a test | met: `every_declared_route_has_a_row_in_the_access_table` |
+| e2e with keys | met: `make e2e` passes 18 of 18 steps with a seeded agent key |
+
+Not covered by a test yet: the optional OIDC JWT path (compiled and wired, no JWT issued in tests).
