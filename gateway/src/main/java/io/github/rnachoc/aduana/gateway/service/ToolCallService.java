@@ -2,13 +2,17 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.service;
 
+import io.github.rnachoc.aduana.gateway.catalog.ArgumentValidator;
+import io.github.rnachoc.aduana.gateway.catalog.CatalogService;
 import io.github.rnachoc.aduana.gateway.config.AduanaProperties;
 import io.github.rnachoc.aduana.gateway.error.AgentErrorCode;
 import io.github.rnachoc.aduana.gateway.error.AgentErrors;
+import io.github.rnachoc.aduana.gateway.identity.Principal;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamClient;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamResponse;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamServer;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,7 +21,8 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Runs one `tools/call` from an agent: resolve the tool, check the arguments, forward, map errors.
+ * Runs one `tools/call` from an agent: resolve the tool in the catalog, check the arguments against
+ * the pinned schema and size limit, forward with the injected credential, map errors.
  *
  * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
  */
@@ -27,6 +32,8 @@ public class ToolCallService {
   private static final Logger LOG = LoggerFactory.getLogger(ToolCallService.class);
 
   private final AduanaProperties properties;
+  private final CatalogService catalog;
+  private final ArgumentValidator validator;
   private final UpstreamClient upstreams;
   private final AgentErrors errors;
   private final JsonMapper json;
@@ -34,15 +41,24 @@ public class ToolCallService {
   /**
    * Creates the service.
    *
-   * @param properties the configured upstreams and limits
+   * @param properties size limits
+   * @param catalog the catalog
+   * @param validator checks arguments against pinned schemas
    * @param upstreams the upstream client
    * @param errors builds agent-facing errors
    * @param json the shared JSON mapper
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public ToolCallService(
-      AduanaProperties properties, UpstreamClient upstreams, AgentErrors errors, JsonMapper json) {
+      AduanaProperties properties,
+      CatalogService catalog,
+      ArgumentValidator validator,
+      UpstreamClient upstreams,
+      AgentErrors errors,
+      JsonMapper json) {
     this.properties = properties;
+    this.catalog = catalog;
+    this.validator = validator;
     this.upstreams = upstreams;
     this.errors = errors;
     this.json = json;
@@ -51,15 +67,20 @@ public class ToolCallService {
   /**
    * Runs a call and returns the `tools/call` result for the agent.
    *
+   * @param principal the caller
    * @param params the agent's `tools/call` parameters
    * @return the upstream's result, or an error result
-   * @throws io.github.rnachoc.aduana.gateway.mcp.McpException TOOL_NOT_FOUND for an unknown tool
+   * @throws io.github.rnachoc.aduana.gateway.mcp.McpException TOOL_NOT_FOUND for a tool that does
+   *     not exist or is not offered, without saying which
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public JsonNode call(ObjectNode params) {
+  public JsonNode call(Principal principal, ObjectNode params) {
     ToolName name =
         ToolName.parse(params.path("name").asString("")).orElseThrow(errors::toolNotFound);
-    UpstreamServer server = properties.upstream(name.server()).orElseThrow(errors::toolNotFound);
+    CatalogService.OfferedTool offered =
+        catalog
+            .offeredTool(principal.tenantId(), name.server(), name.tool())
+            .orElseThrow(errors::toolNotFound);
     JsonNode arguments = params.path("arguments");
     if (!arguments.isMissingNode() && !arguments.isObject()) {
       return errors.toolResult(AgentErrorCode.ARGS_INVALID);
@@ -70,10 +91,16 @@ public class ToolCallService {
         > properties.limits().maxArgumentsBytes()) {
       return errors.toolResult(AgentErrorCode.ARGS_INVALID);
     }
+    List<String> problems =
+        validator.validate(offered.tool(), forwardedArguments, offered.server().strict());
+    if (!problems.isEmpty()) {
+      return errors.toolResult(AgentErrorCode.ARGS_INVALID);
+    }
     ObjectNode forward = json.createObjectNode();
     forward.put("name", name.tool());
     forward.set("arguments", forwardedArguments);
-    return interpret(server, upstreams.send(server, "tools/call", forward));
+    UpstreamServer server = offered.server().upstream();
+    return interpret(server, upstreams.send(server, "tools/call", forward, offered.credential()));
   }
 
   /**

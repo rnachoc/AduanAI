@@ -8,6 +8,25 @@ spring:
       enabled: true
   main:
     banner-mode: "off"
+  datasource:
+    url: ${ADUANA_DATABASE_URL:jdbc:postgresql://localhost:5432/aduana}
+    username: ${ADUANA_DATABASE_USER:aduana}
+    password: ${ADUANA_DATABASE_PASSWORD:}
+  flyway:
+    locations: classpath:db/migration
 server:
   port: 8080
   shutdown: graceful
+  servlet:
+    session:
+      timeout: 8h
+      cookie:
+        name: ADUANA_SESSION
+        http-only: true
+        same-site: strict
+        secure: ${ADUANA_SECURE_COOKIES:false}
+aduana:
+  master-key: ${ADUANA_MASTER_KEY:}
+  bootstrap:
+    admin-email: ${ADUANA_BOOTSTRAP_ADMIN_EMAIL:}
+    admin-password: ${ADUANA_BOOTSTRAP_ADMIN_PASSWORD:}

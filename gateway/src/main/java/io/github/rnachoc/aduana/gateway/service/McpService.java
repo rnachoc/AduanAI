@@ -2,6 +2,7 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.service;
 
+import io.github.rnachoc.aduana.gateway.identity.Principal;
 import io.github.rnachoc.aduana.gateway.mcp.McpException;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
 import io.github.rnachoc.aduana.gateway.mcp.McpRequest;
@@ -39,18 +40,19 @@ public class McpService {
   /**
    * Handles one request and returns its result object.
    *
+   * @param principal the authenticated caller
    * @param request the parsed request
    * @return the JSON-RPC result
    * @throws McpException for unsupported methods and protocol errors
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public JsonNode handle(McpRequest request) {
+  public JsonNode handle(Principal principal, McpRequest request) {
     return switch (request.method()) {
       case "server/discover" -> discover();
       case "initialize" -> initialize();
       case "ping" -> json.createObjectNode();
-      case "tools/list" -> toolList.listTools();
-      case "tools/call" -> toolCall.call(request.params());
+      case "tools/list" -> toolList.listTools(principal);
+      case "tools/call" -> toolCall.call(principal, request.params());
       case "resources/list" -> emptyList("resources");
       case "resources/templates/list" -> emptyList("resourceTemplates");
       case "prompts/list" -> emptyList("prompts");

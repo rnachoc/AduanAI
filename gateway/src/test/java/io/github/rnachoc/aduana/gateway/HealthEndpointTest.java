@@ -4,17 +4,22 @@ package io.github.rnachoc.aduana.gateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.rnachoc.aduana.gateway.support.TestDatabase;
 import java.net.URI;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 
 /**
  * Starts the whole gateway on a random port and probes it the way the container does.
  *
  * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {"aduana.master-key=local-only", "aduana.catalog.sync-interval=PT1H"})
+@Import(TestDatabase.class)
 class HealthEndpointTest {
 
   @LocalServerPort private int port;

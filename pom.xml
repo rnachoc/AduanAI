@@ -49,6 +49,7 @@
     <testcontainers.version>2.0.5</testcontainers.version>
     <json-schema-validator.version>3.0.9</json-schema-validator.version>
     <picocli.version>4.7.7</picocli.version>
+    <bouncycastle.version>1.87</bouncycastle.version>
     <spotless.version>3.11.0</spotless.version>
     <google-java-format.version>2.0.0</google-java-format.version>
     <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
@@ -90,6 +91,16 @@
         <groupId>io.github.rnachoc.aduana</groupId>
         <artifactId>aduana-audit</artifactId>
         <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.networknt</groupId>
+        <artifactId>json-schema-validator</artifactId>
+        <version>${json-schema-validator.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId>
+        <version>${bouncycastle.version}</version>
       </dependency>
       <dependency>
         <groupId>info.picocli</groupId>
