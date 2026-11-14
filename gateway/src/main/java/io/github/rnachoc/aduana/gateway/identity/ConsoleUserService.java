@@ -63,15 +63,17 @@ public class ConsoleUserService {
     if (users.findByEmail(email).isPresent()) {
       throw new IllegalArgumentException("A console user with that e-mail exists");
     }
-    String name = "user." + email.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]", "-");
+    UUID userId = UUID.randomUUID();
+    // The principal name derives from the id, not the e-mail, so any valid address fits its
+    // pattern.
     Principal principal =
         principals.create(
             tenantId,
             Principal.Kind.USER,
-            name,
+            "user-" + userId,
             Map.of(),
             List.of(role.name().toLowerCase(Locale.ROOT)));
-    ConsoleUser user = new ConsoleUser(tenantId, UUID.randomUUID(), principal.id(), email, role);
+    ConsoleUser user = new ConsoleUser(tenantId, userId, principal.id(), email, role);
     users.insert(user, encoder.encode(password), clock.instant());
     return user;
   }

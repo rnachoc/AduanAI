@@ -7,7 +7,12 @@ import io.github.rnachoc.aduana.gateway.catalog.CatalogService;
 import io.github.rnachoc.aduana.gateway.identity.ConsoleUser;
 import io.github.rnachoc.aduana.gateway.identity.ConsoleUserService;
 import io.github.rnachoc.aduana.gateway.identity.Tenants;
+import io.github.rnachoc.aduana.gateway.policy.PolicyService;
+import io.github.rnachoc.aduana.gateway.policy.PolicySource;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamServer;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +36,8 @@ public class Bootstrap implements ApplicationRunner {
   private final AduanaProperties properties;
   private final CatalogService catalog;
   private final ConsoleUserService users;
+  private final PolicyService policies;
+  private final String policyDirectory;
   private final String adminEmail;
   private final String adminPassword;
 
@@ -40,6 +47,8 @@ public class Bootstrap implements ApplicationRunner {
    * @param properties the configured servers
    * @param catalog the catalog
    * @param users creates the first administrator
+   * @param policies loads the bundle from the configured directory
+   * @param policyDirectory the bundle directory, if configured
    * @param adminEmail the first administrator's address, if set
    * @param adminPassword the first administrator's password, if set
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
@@ -48,11 +57,15 @@ public class Bootstrap implements ApplicationRunner {
       AduanaProperties properties,
       CatalogService catalog,
       ConsoleUserService users,
+      PolicyService policies,
+      @Value("${aduana.policy.directory:}") String policyDirectory,
       @Value("${aduana.bootstrap.admin-email:}") String adminEmail,
       @Value("${aduana.bootstrap.admin-password:}") String adminPassword) {
     this.properties = properties;
     this.catalog = catalog;
     this.users = users;
+    this.policies = policies;
+    this.policyDirectory = policyDirectory;
     this.adminEmail = adminEmail;
     this.adminPassword = adminPassword;
   }
@@ -84,6 +97,32 @@ public class Bootstrap implements ApplicationRunner {
       }
     }
     syncAll();
+    loadPolicyDirectory();
+  }
+
+  /**
+   * Loads the bundle in `aduana.policy.directory`, so a deployment keeps its policy in version
+   * control next to its configuration. A bundle that fails its checks is logged and not loaded.
+   *
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private void loadPolicyDirectory() {
+    if (policyDirectory.isBlank()) {
+      return;
+    }
+    PolicySource source;
+    try {
+      source = PolicySource.read(Path.of(policyDirectory));
+    } catch (IOException exception) {
+      throw new IllegalStateException(
+          "Cannot read the policy directory " + policyDirectory, exception);
+    }
+    PolicyService.LoadResult result = policies.load(Tenants.DEFAULT, source, Optional.empty());
+    if (result instanceof PolicyService.LoadResult.Rejected(List<String> errors)) {
+      LOG.error("policy in {} was rejected: {}", policyDirectory, errors);
+    } else {
+      LOG.info("policy in {} is active: {}", policyDirectory, result);
+    }
   }
 
   /**

@@ -9,9 +9,12 @@ import io.github.rnachoc.aduana.gateway.error.AgentErrorCode;
 import io.github.rnachoc.aduana.gateway.error.AgentErrors;
 import io.github.rnachoc.aduana.gateway.identity.Principal;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
+import io.github.rnachoc.aduana.gateway.policy.PolicyService;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamClient;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamResponse;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamServer;
+import io.github.rnachoc.aduana.policy.CallContext;
+import io.github.rnachoc.aduana.policy.Decision;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +25,11 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Runs one `tools/call` from an agent: resolve the tool in the catalog, check the arguments against
- * the pinned schema and size limit, forward with the injected credential, map errors.
+ * the pinned schema and size limit, ask the policy, forward with the injected credential, map
+ * errors.
+ *
+ * <p>Approvals (Phase 6) and obligations such as redaction (Phase 7) are not applied yet: a call
+ * that needs approval is answered `APPROVAL_PENDING` and never forwarded.
  *
  * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
  */
@@ -34,6 +41,7 @@ public class ToolCallService {
   private final AduanaProperties properties;
   private final CatalogService catalog;
   private final ArgumentValidator validator;
+  private final PolicyService policies;
   private final UpstreamClient upstreams;
   private final AgentErrors errors;
   private final JsonMapper json;
@@ -44,6 +52,7 @@ public class ToolCallService {
    * @param properties size limits
    * @param catalog the catalog
    * @param validator checks arguments against pinned schemas
+   * @param policies decides calls with the active policy
    * @param upstreams the upstream client
    * @param errors builds agent-facing errors
    * @param json the shared JSON mapper
@@ -53,12 +62,14 @@ public class ToolCallService {
       AduanaProperties properties,
       CatalogService catalog,
       ArgumentValidator validator,
+      PolicyService policies,
       UpstreamClient upstreams,
       AgentErrors errors,
       JsonMapper json) {
     this.properties = properties;
     this.catalog = catalog;
     this.validator = validator;
+    this.policies = policies;
     this.upstreams = upstreams;
     this.errors = errors;
     this.json = json;
@@ -95,6 +106,22 @@ public class ToolCallService {
         validator.validate(offered.tool(), forwardedArguments, offered.server().strict());
     if (!problems.isEmpty()) {
       return errors.toolResult(AgentErrorCode.ARGS_INVALID);
+    }
+    PolicyService.Decided decided =
+        policies.decide(
+            principal, offered.tool(), forwardedArguments, CallContext.ContextFacts.CLEAN);
+    Decision decision = decided.decision();
+    if (decision instanceof Decision.Deny deny) {
+      LOG.info(
+          "denied {} for {}: {} by {}",
+          name.qualified(),
+          principal.name(),
+          deny.reasonCode(),
+          deny.matchedRules());
+      return errors.toolResult(AgentErrorCode.POLICY_DENIED);
+    }
+    if (decision instanceof Decision.RequireApproval) {
+      return errors.toolResult(AgentErrorCode.APPROVAL_PENDING);
     }
     ObjectNode forward = json.createObjectNode();
     forward.put("name", name.tool());

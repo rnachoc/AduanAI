@@ -80,7 +80,7 @@ public final class FakeUpstream implements AutoCloseable {
    *
    * @param name the tool name
    * @param description the description published in tools/list
-   * @param properties the string properties its input schema declares
+   * @param properties the properties its input schema declares, as `name` (a string) or `name:type`
    * @return this server, for chaining
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
@@ -92,7 +92,8 @@ public final class FakeUpstream implements AutoCloseable {
     schema.put("type", "object");
     ObjectNode declared = schema.putObject("properties");
     for (String property : properties) {
-      declared.putObject(property).put("type", "string");
+      String[] parts = property.split(":", 2);
+      declared.putObject(parts[0]).put("type", parts.length == 2 ? parts[1] : "string");
     }
     tools.put(name, tool);
     return this;

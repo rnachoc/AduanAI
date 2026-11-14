@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+- name: a support agent cannot refund on its own
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true, sensitivity: high }
+    args: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101, reason: damaged box }
+  expect: { decision: require_approval, rules: [refunds-need-a-person] }
+
+- name: a finance agent also needs approval to refund
+  given:
+    principal: { attributes: { team: finance } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101, reason: goodwill }
+  expect: { decision: require_approval }
+
+- name: a refund of exactly 500 EUR still goes to approval
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1002, amount_cents: 50000, destination_iban: XX6800000000000000000202, reason: late }
+  expect: { decision: require_approval }
+
+- name: a refund one cent above 500 EUR is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1002, amount_cents: 50001, destination_iban: XX6800000000000000000202, reason: late }
+  expect: { decision: deny, reason_code: REFUND_OVER_LIMIT }
+
+- name: a refund of the whole big order is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1002, amount_cents: 129900, destination_iban: XX2000000000000000666001, reason: moved banks }
+  expect: { decision: deny, rules: [refunds-need-a-person, big-refunds-denied], reason_code: REFUND_OVER_LIMIT }
+
+- name: a refund to an account outside the test country is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 1000, destination_iban: ES9121000418450200051332, reason: damaged box }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
+
+- name: a refund without a reason is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101 }
+  expect: { decision: deny, reason_code: REFUND_NEEDS_REASON }
+
+- name: an amount sent as a string never matches the limit and is reported
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: '99999', destination_iban: XX7900000000000000000101, reason: x }
+  expect: { decision: require_approval, rules: [refunds-need-a-person] }
+
+- name: an audit agent can never refund
+  given:
+    principal: { attributes: { team: audit } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101, reason: x }
+  expect: { decision: deny, reason_code: AUDIT_IS_READ_ONLY }
+
+- name: a production agent can never refund
+  given:
+    principal: { attributes: { team: finance, env: prod } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101, reason: x }
+  expect: { decision: deny, reason_code: PRODUCTION_OFF_LIMITS }
+
+- name: support can read an order with the paying account redacted
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: get_order }
+    args: { order_id: O-1001 }
+  expect: { decision: allow, rules: [orders-read], redact_result: [iban] }
+
+- name: finance can list refunds
+  given:
+    principal: { attributes: { team: finance } }
+    tool: { server: payments, name: list_refunds }
+    args: { order_id: O-1001 }
+  expect: { decision: allow }
+
+- name: audit can list refunds
+  given:
+    principal: { attributes: { team: audit } }
+    tool: { server: payments, name: list_refunds }
+    args: {}
+  expect: { decision: allow }
+
+- name: an agent with another team cannot read orders
+  given:
+    principal: { attributes: { team: marketing } }
+    tool: { server: payments, name: get_order }
+    args: { order_id: O-1001 }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
+
+- name: a marketing agent cannot refund either
+  given:
+    principal: { attributes: { team: marketing } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 100, destination_iban: XX7900000000000000000101, reason: x }
+  expect: { decision: deny }

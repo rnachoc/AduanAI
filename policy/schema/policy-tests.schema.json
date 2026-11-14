@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/rnachoc/aduana/policy/schema/policy-tests.schema.json",
+  "title": "Aduana policy test cases",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["name", "given", "expect"],
+    "properties": {
+      "name": { "type": "string", "minLength": 1 },
+      "given": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tool"],
+        "properties": {
+          "principal": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" },
+              "attributes": { "type": "object", "additionalProperties": { "type": "string" } },
+              "groups": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "tool": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["server", "name"],
+            "properties": {
+              "server": { "type": "string" },
+              "name": { "type": "string" },
+              "side_effect": { "type": "boolean" },
+              "untrusted_source": { "type": "boolean" },
+              "sensitivity": { "enum": ["low", "medium", "high"] }
+            }
+          },
+          "args": { "type": "object" },
+          "context": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "flow_from_untrusted": { "type": "boolean" },
+              "context_tainted": { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision"],
+        "properties": {
+          "decision": { "enum": ["allow", "deny", "require_approval"] },
+          "rules": { "type": "array", "items": { "type": "string" } },
+          "reason_code": { "type": "string" },
+          "redact_result": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

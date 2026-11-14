@@ -5,6 +5,7 @@ package io.github.rnachoc.aduana.gateway.service;
 import io.github.rnachoc.aduana.gateway.catalog.CatalogService;
 import io.github.rnachoc.aduana.gateway.catalog.CatalogTool;
 import io.github.rnachoc.aduana.gateway.identity.Principal;
+import io.github.rnachoc.aduana.gateway.policy.PolicyService;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ArrayNode;
@@ -20,17 +21,20 @@ import tools.jackson.databind.node.ObjectNode;
 public class ToolListService {
 
   private final CatalogService catalog;
+  private final PolicyService policies;
   private final JsonMapper json;
 
   /**
    * Creates the service.
    *
    * @param catalog the catalog
+   * @param policies hides tools the active policy can never let the caller use
    * @param json the shared JSON mapper
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public ToolListService(CatalogService catalog, JsonMapper json) {
+  public ToolListService(CatalogService catalog, PolicyService policies, JsonMapper json) {
     this.catalog = catalog;
+    this.policies = policies;
     this.json = json;
   }
 
@@ -46,6 +50,7 @@ public class ToolListService {
     result.put("resultType", "complete");
     ArrayNode tools = result.putArray("tools");
     catalog.offeredTools(principal.tenantId()).stream()
+        .filter(tool -> policies.mayOffer(principal, tool))
         .sorted((a, b) -> qualified(a).compareTo(qualified(b)))
         .forEach(tool -> tools.add(agentView(tool)));
     result.put("ttlMs", 0);

@@ -20,5 +20,28 @@
       <groupId>info.picocli</groupId>
       <artifactId>picocli</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.github.rnachoc.aduana</groupId>
+      <artifactId>aduana-policy</artifactId>
+    </dependency>
   </dependencies>
+  <build>
+    <finalName>aduana-cli</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <mainClass>io.github.rnachoc.aduana.cli.Aduana</mainClass>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

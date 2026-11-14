@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+- name: a support agent can read an example page
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: webfetch, name: fetch_url, untrusted_source: true }
+    args: { url: 'https://shop.example.com/returns' }
+  expect: { decision: allow, rules: [web-read] }
+
+- name: a support agent can read a page on any example subdomain
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: webfetch, name: fetch_url, untrusted_source: true }
+    args: { url: 'https://blog.example.com/refund-tips' }
+  expect: { decision: allow }
+
+- name: a page outside example domains is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: webfetch, name: fetch_url, untrusted_source: true }
+    args: { url: 'https://evil.test/payload' }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
+
+- name: a lookalike host that starts with example.com is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: webfetch, name: fetch_url, untrusted_source: true }
+    args: { url: 'https://example.com.evil.test/' }
+  expect: { decision: deny }
+
+- name: plain http is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: webfetch, name: fetch_url, untrusted_source: true }
+    args: { url: 'http://shop.example.com/returns' }
+  expect: { decision: deny }
+
+- name: a finance agent cannot browse
+  given:
+    principal: { attributes: { team: finance } }
+    tool: { server: webfetch, name: fetch_url, untrusted_source: true }
+    args: { url: 'https://shop.example.com/returns' }
+  expect: { decision: deny }
+
+- name: a refund whose account came from an untrusted page needs security
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 4999, destination_iban: XX2000000000000000666001, reason: moved banks }
+    context: { flow_from_untrusted: true, context_tainted: true }
+  expect: { decision: require_approval, rules: [untrusted-flow-into-side-effects, refunds-need-a-person] }
+
+- name: an untrusted flow into a big refund is still denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1002, amount_cents: 129900, destination_iban: XX2000000000000000666001, reason: moved banks }
+    context: { flow_from_untrusted: true }
+  expect: { decision: deny, reason_code: REFUND_OVER_LIMIT }
+
+- name: an untrusted flow into a read is allowed, because reads change nothing
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: get_customer }
+    args: { customer_id: C-1001 }
+    context: { flow_from_untrusted: true }
+  expect: { decision: allow, rules: [crm-read] }
+
+- name: an untrusted flow never opens a tool to a team that has no rule for it
+  given:
+    principal: { attributes: { team: marketing } }
+    tool: { server: payments, name: refund, side_effect: true }
+    args: { order_id: O-1001, amount_cents: 100, destination_iban: XX7900000000000000000101, reason: x }
+    context: { flow_from_untrusted: true }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
+
+- name: an untrusted flow into an e-mail change of a tainted agent is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1001, email: refunds-desk@example.com }
+    context: { flow_from_untrusted: true, context_tainted: true }
+  expect: { decision: deny, reason_code: TAINTED_CONTEXT }
+
+- name: a tool on an unknown server is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: shell, name: exec, side_effect: true }
+    args: { command: 'rm -rf /' }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }

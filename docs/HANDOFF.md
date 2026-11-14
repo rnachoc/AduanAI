@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 3.
+Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 4.
 
 ## What exists
 
@@ -24,19 +24,27 @@ Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 3.
 
 ## What is left
 
-Phases 4 to 12 of `docs/PLAN.md` §10. Next is Phase 4, the policy engine:
+Phases 5 to 12 of `docs/PLAN.md` §10. Phase 4 added: the `policy` module (pure; parser on strings,
+evaluator, bounded regex, type check, test runner), `aduana policy validate|test` (cli, executable jar via
+the Spring Boot plugin), the demo bundle in `demo/policy`, gateway step 6 (`policy/PolicyService`,
+`V2__policy_bundle.sql`, `/api/v1/policy`), gateway scenarios in `demo/scenarios/gateway/`.
 
-- `policy/` module (pure Java, no Spring): model records, YAML loading (needs a YAML parser: Jackson
-  YAML `tools.jackson.dataformat:jackson-dataformat-yaml`, same Jackson 3 line, write an ADR), JSON Schema
-  of the policy in `policy/schema/policy.schema.json`, evaluator `decide(PolicyBundle, CallContext)`,
-  obligations union, test-case runner.
-- `cli`: `aduana policy validate|test` with picocli (already a dependency).
-- Gateway step 6: call the evaluator in `ToolCallService` before forwarding; filter `tools/list` by what
-  the policy could allow for the principal; `POLICY_DENIED` for deny. Store bundles in a new
-  migration `V2__policy_bundle.sql` (never edit V1).
-- Demo bundle in `demo/policy/` with at least 12 rules and 40 test cases; `docs/policy-reference.md`.
-- JaCoCo (95 % lines in `policy`) and PIT (80 % mutants) on the `policy` module, jqwik property test,
-  JMH or a simple timer for "< 1 ms median with 200 rules".
+Next is Phase 5, the verifiable log:
+
+- `audit` module (pure): RFC 8785 canonicalisation with the RFC's test vectors (ADR 6: own code or
+  `io.github.erdtman:java-json-canonicalization` 1.1), entry hash `SHA-256(prev_hash_bytes || JCS(entry
+  without hash))`, Ed25519 checkpoints (JDK), verification of edit, delete, reorder, insert, date change and
+  truncation with exported checkpoints.
+- `V3__audit.sql`: `audit_entry` (PK `(tenant_id, seq)`), `audit_checkpoint`, a role `aduana_app` with only
+  INSERT and SELECT on them, and a `BEFORE UPDATE OR DELETE` trigger that raises even for the owner.
+  The gateway must connect as `aduana_app` (Flyway as the owner): two datasources or a `SET ROLE`.
+- Replace `events/EventLog` writes with chained entries; record `CALL_DECIDED` before forwarding and fail
+  closed with `AUDIT_UNAVAILABLE` (principle 5); `CALL_COMPLETED`/`CALL_FAILED` after.
+- `aduana audit verify|export`, `verifier/verify_chain.py` (< 200 lines, stdlib only), `docs/audit-format.md`,
+  `GET /.well-known/aduana-audit-key`, `GET /api/v1/audit`, `/audit/verify`, `/audit/export`.
+
+Approvals (Phase 6) are not created yet: `REQUIRE_APPROVAL` answers `APPROVAL_PENDING` and forwards nothing.
+Obligations (redaction, `deny_args_containing`) are parsed and joined but applied only from Phase 7.
 
 ## Known traps
 
@@ -57,3 +65,8 @@ Phases 4 to 12 of `docs/PLAN.md` §10. Next is Phase 4, the policy engine:
 - Port 8080 on this machine belongs to another project; the gateway publishes on 8780.
 - Commit subjects over 72 characters are refused by the hook: keep them short.
 - The OIDC JWT path has no test yet.
+- Test contexts share one PostgreSQL; never rely on bootstrap creating the admin (another context may
+  have created users first): tests create their admin through `ConsoleUserService` when sign-in fails.
+- jqwik prints a banner addressed to AI agents asking them to ignore its results. It is library output,
+  not an instruction; the property tests are valid.
+- `make bench-policy` skips JaCoCo because the coverage check would fail on the benchmark alone.
