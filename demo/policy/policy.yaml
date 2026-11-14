@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The demo policy: what the support, finance and audit agents may do with the demo servers.
+# Anything no rule allows is denied, so most limits below are written as narrow allow rules.
+version: 1
+defaults:
+  decision: deny
+rules:
+  - id: untrusted-flow-into-side-effects
+    description: A value copied from an untrusted page into a call with side effects needs security.
+    # First in the file: when several approval rules match, the first one names the approvers.
+    # An approval rule is a grant through a person, so it is scoped to teams that may act at all.
+    match:
+      principal: { attributes: { team: { in: [support, finance] } } }
+      tool: { side_effect: true }
+      context: { flow_from_untrusted: true }
+    effect: require_approval
+    approval: { approvers_group: security, expires_in: 15m }
+
+  - id: crm-read
+    description: Support agents may look customers up; contact details come back redacted.
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: crm, name: { in: [get_customer, search_customers] } }
+    effect: allow
+    obligations:
+      redact_result: [email, phone_es, dni_nie, iban]
+      deny_args_containing: [card, secret]
+
+  - id: finance-searches-names
+    description: Finance agents may search customers by name but not open their records.
+    match:
+      principal: { attributes: { team: finance } }
+      tool: { server: crm, name: search_customers }
+    effect: allow
+    obligations:
+      redact_result: [email, phone_es]
+
+  - id: crm-search-query-too-long
+    description: A search string of 51 characters or more is data being smuggled, not a name.
+    match:
+      tool: { server: crm, name: search_customers }
+      args:
+        - { path: '$.query', matches: '.{51}' }
+    effect: deny
+    reason_code: SEARCH_QUERY_TOO_LONG
+
+  - id: crm-email-change-needs-a-lead
+    description: Changing a customer's e-mail to another example.com address needs a support lead.
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: crm, name: update_customer_email }
+      args:
+        - { path: '$.email', matches: "@([a-z0-9-]+\\.)*example\\.com$" }
+    effect: require_approval
+    approval: { approvers_group: support-leads, expires_in: 30m }
+
+  - id: tainted-agents-do-not-change-emails
+    description: After reading the open web, an agent does not change contact details at all.
+    match:
+      tool: { server: crm, name: update_customer_email }
+      context: { context_tainted: true }
+    effect: deny
+    reason_code: TAINTED_CONTEXT
+
+  - id: orders-read
+    description: Support, finance and audit agents may read orders and refunds.
+    match:
+      principal: { attributes: { team: { in: [support, finance, audit] } } }
+      tool: { server: payments, name: { in: [get_order, list_refunds] } }
+    effect: allow
+    obligations:
+      redact_result: [iban]
+
+  - id: refunds-need-a-person
+    description: A refund to a test account (country XX) goes ahead only once finance approves it.
+    match:
+      principal: { attributes: { team: { in: [support, finance] } } }
+      tool: { server: payments, name: refund }
+      args:
+        - { path: '$.destination_iban', matches: '^XX' }
+    effect: require_approval
+    approval: { approvers_group: finance, expires_in: 15m }
+
+  - id: big-refunds-denied
+    description: Refunds above 500 EUR go through the back office, never through an agent.
+    match:
+      tool: { server: payments, name: refund }
+      args:
+        - { path: '$.amount_cents', gt: 50000 }
+    effect: deny
+    reason_code: REFUND_OVER_LIMIT
+
+  - id: refunds-need-a-reason
+    description: An approver needs to see why; a refund without a reason is refused.
+    match:
+      tool: { server: payments, name: refund }
+      args:
+        - { path: '$.reason', exists: false }
+    effect: deny
+    reason_code: REFUND_NEEDS_REASON
+
+  - id: audit-never-acts
+    description: Audit agents read; they never call a tool with side effects.
+    match:
+      principal: { attributes: { team: audit } }
+      tool: { side_effect: true }
+    effect: deny
+    reason_code: AUDIT_IS_READ_ONLY
+
+  - id: production-is-off-limits
+    description: An agent labelled for production never acts through the demo gateway.
+    match:
+      principal: { attributes: { env: prod } }
+      tool: { side_effect: true }
+    effect: deny
+    reason_code: PRODUCTION_OFF_LIMITS
+
+  - id: web-read
+    description: Support agents may read pages on example domains, and nothing else on the web.
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: webfetch, name: fetch_url }
+      args:
+        - { path: '$.url', matches: "^https://([a-z0-9-]+\\.)*example\\.com/" }
+    effect: allow

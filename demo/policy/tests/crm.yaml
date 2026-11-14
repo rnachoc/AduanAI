@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+- name: a support agent can search customers and gets contact details redacted
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: search_customers }
+    args: { query: ana }
+  expect: { decision: allow, rules: [crm-read], redact_result: [dni_nie, email, iban, phone_es] }
+
+- name: a support agent can open a customer record
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: get_customer, sensitivity: medium }
+    args: { customer_id: C-1001 }
+  expect: { decision: allow, rules: [crm-read] }
+
+- name: a finance agent can search customers with lighter redaction
+  given:
+    principal: { attributes: { team: finance } }
+    tool: { server: crm, name: search_customers }
+    args: { query: bruno }
+  expect: { decision: allow, rules: [finance-searches-names], redact_result: [email, phone_es] }
+
+- name: a finance agent cannot open a customer record
+  given:
+    principal: { attributes: { team: finance } }
+    tool: { server: crm, name: get_customer }
+    args: { customer_id: C-1001 }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
+
+- name: an audit agent cannot search customers
+  given:
+    principal: { attributes: { team: audit } }
+    tool: { server: crm, name: search_customers }
+    args: { query: ana }
+  expect: { decision: deny, rules: [], reason_code: NO_MATCHING_RULE }
+
+- name: an agent with no team gets nothing from the crm
+  given:
+    tool: { server: crm, name: search_customers }
+    args: { query: ana }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
+
+- name: a search of fifty characters is still a name
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: search_customers }
+    args: { query: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }
+  expect: { decision: allow }
+
+- name: a search of fifty-one characters is refused even for support
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: search_customers }
+    args: { query: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }
+  expect: { decision: deny, rules: [crm-read, crm-search-query-too-long], reason_code: SEARCH_QUERY_TOO_LONG }
+
+- name: a support agent changing an e-mail within example.com needs a support lead
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: update_customer_email, side_effect: true, sensitivity: high }
+    args: { customer_id: C-1001, email: ana.nueva@example.com }
+  expect: { decision: require_approval, rules: [crm-email-change-needs-a-lead] }
+
+- name: a subdomain of example.com is still an example address
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1003, email: pagos@carla.example.com }
+  expect: { decision: require_approval }
+
+- name: an e-mail outside example.com is denied by default
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1001, email: ana@attacker.test }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
+
+- name: a lookalike domain that only contains example.com is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1001, email: ana@example.com.attacker.test }
+  expect: { decision: deny }
+
+- name: a finance agent cannot change e-mails
+  given:
+    principal: { attributes: { team: finance } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1001, email: ana@example.com }
+  expect: { decision: deny }
+
+- name: an e-mail change after reading the web is denied, not merely approved
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1001, email: ana@example.com }
+    context: { context_tainted: true }
+  expect: { decision: deny, reason_code: TAINTED_CONTEXT }
+
+- name: an audit agent cannot change e-mails
+  given:
+    principal: { attributes: { team: audit } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1001, email: ana@example.com }
+  expect: { decision: deny, reason_code: AUDIT_IS_READ_ONLY }
+
+- name: a production agent cannot change e-mails
+  given:
+    principal: { attributes: { team: support, env: prod } }
+    tool: { server: crm, name: update_customer_email, side_effect: true }
+    args: { customer_id: C-1001, email: ana@example.com }
+  expect: { decision: deny, reason_code: PRODUCTION_OFF_LIMITS }
+
+- name: a production agent may still read
+  given:
+    principal: { attributes: { team: support, env: prod } }
+    tool: { server: crm, name: get_customer }
+    args: { customer_id: C-1001 }
+  expect: { decision: allow }
+
+- name: an unknown crm tool is denied
+  given:
+    principal: { attributes: { team: support } }
+    tool: { server: crm, name: delete_customer, side_effect: true }
+    args: { customer_id: C-1001 }
+  expect: { decision: deny, reason_code: NO_MATCHING_RULE }
