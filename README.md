@@ -27,7 +27,7 @@ make test    # every test suite
 | 2 | Transparent proxy | done |
 | 3 | Identity and catalog | done |
 | 4 | Policy engine | done |
-| 5 | Verifiable log | not started |
+| 5 | Verifiable log | done |
 | 6 | Approvals | not started |
 | 7 | Redaction, injection flags and taint | not started |
 | 8 | Limits, idempotency and stdio servers | not started |

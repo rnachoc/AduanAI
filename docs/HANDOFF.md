@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 4.
+Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 5.
 
 ## What exists
 
@@ -24,27 +24,23 @@ Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 4.
 
 ## What is left
 
-Phases 5 to 12 of `docs/PLAN.md` §10. Phase 4 added: the `policy` module (pure; parser on strings,
-evaluator, bounded regex, type check, test runner), `aduana policy validate|test` (cli, executable jar via
-the Spring Boot plugin), the demo bundle in `demo/policy`, gateway step 6 (`policy/PolicyService`,
-`V2__policy_bundle.sql`, `/api/v1/policy`), gateway scenarios in `demo/scenarios/gateway/`.
+Phases 6 to 12 of `docs/PLAN.md` §10. Phase 5 added the `audit` module, `V3__audit_log.sql`, the
+`gateway/audit` package (`AuditLog`, `AuditRepository`, `SigningKeys`, `CheckpointScheduler`), the chained
+`EventLog`, `aduana audit verify|export`, `verifier/` and `docs/audit-format.md`.
 
-Next is Phase 5, the verifiable log:
+Next is Phase 6, approvals (plan §5.4, ADR 7 chose `hold`):
 
-- `audit` module (pure): RFC 8785 canonicalisation with the RFC's test vectors (ADR 6: own code or
-  `io.github.erdtman:java-json-canonicalization` 1.1), entry hash `SHA-256(prev_hash_bytes || JCS(entry
-  without hash))`, Ed25519 checkpoints (JDK), verification of edit, delete, reorder, insert, date change and
-  truncation with exported checkpoints.
-- `V3__audit.sql`: `audit_entry` (PK `(tenant_id, seq)`), `audit_checkpoint`, a role `aduana_app` with only
-  INSERT and SELECT on them, and a `BEFORE UPDATE OR DELETE` trigger that raises even for the owner.
-  The gateway must connect as `aduana_app` (Flyway as the owner): two datasources or a `SET ROLE`.
-- Replace `events/EventLog` writes with chained entries; record `CALL_DECIDED` before forwarding and fail
-  closed with `AUDIT_UNAVAILABLE` (principle 5); `CALL_COMPLETED`/`CALL_FAILED` after.
-- `aduana audit verify|export`, `verifier/verify_chain.py` (< 200 lines, stdlib only), `docs/audit-format.md`,
-  `GET /.well-known/aduana-audit-key`, `GET /api/v1/audit`, `/audit/verify`, `/audit/export`.
-
-Approvals (Phase 6) are not created yet: `REQUIRE_APPROVAL` answers `APPROVAL_PENDING` and forwards nothing.
-Obligations (redaction, `deny_args_containing`) are parsed and joined but applied only from Phase 7.
+- `V4__approval.sql`: `approval` table of §5.9 plus `policy_bundle_hash`; grant DML to `aduana_app`.
+- `binding_hash = SHA-256(tenant_id || principal_id || tool || args_hash || policy_bundle_hash)`.
+- In `ToolCallService`, `REQUIRE_APPROVAL`: find a reusable approval by binding hash (approved and unused →
+  consume atomically with `UPDATE … WHERE state='approved' RETURNING` in the same transaction as the
+  `CALL_DECIDED` append; pending → wait), else create one (`APPROVAL_CREATED`), then hold up to
+  `aduana.approvals.hold-timeout` (60 s) polling or waiting on a signal; answer `APPROVAL_PENDING` with
+  `approval_id`, or `APPROVAL_REJECTED`.
+- `GET /api/v1/approvals?state=`, `POST /api/v1/approvals/{id}/approve|reject` (approver role; the
+  approver must be in `approvers_group`; agents can never approve), expiry job (`APPROVAL_EXPIRED`),
+  `GET /api/v1/events` SSE.
+- The demo seed must create approver users (finance, support-leads, security groups).
 
 ## Known traps
 
@@ -69,4 +65,8 @@ Obligations (redaction, `deny_args_containing`) are parsed and joined but applie
   have created users first): tests create their admin through `ConsoleUserService` when sign-in fails.
 - jqwik prints a banner addressed to AI agents asking them to ignore its results. It is library output,
   not an instruction; the property tests are valid.
+- New tables need explicit grants to `aduana_app` in their migration (V3 granted the existing ones).
+- Audit entries are rebuilt from columns for export: any new field must be added to `AuditRepository.FIELDS`,
+  `insert` and `map`, and to `docs/audit-format.md` and `verifier/`.
+- `args_redacted` still holds the arguments as sent; Phase 7 must redact them before they are written.
 - `make bench-policy` skips JaCoCo because the coverage check would fail on the benchmark alone.
