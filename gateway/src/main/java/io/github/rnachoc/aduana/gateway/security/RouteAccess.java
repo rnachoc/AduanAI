@@ -66,7 +66,11 @@ public final class RouteAccess {
           new Route(HttpMethod.POST, "/api/v1/principals/{id}/keys", Access.ADMIN),
           new Route(HttpMethod.DELETE, "/api/v1/keys/{id}", Access.ADMIN),
           new Route(HttpMethod.GET, "/api/v1/policy", Access.ADMIN),
-          new Route(HttpMethod.POST, "/api/v1/policy", Access.ADMIN));
+          new Route(HttpMethod.POST, "/api/v1/policy", Access.ADMIN),
+          new Route(HttpMethod.GET, "/api/v1/audit", Access.VIEWER),
+          new Route(HttpMethod.GET, "/api/v1/audit/verify", Access.VIEWER),
+          new Route(HttpMethod.GET, "/api/v1/audit/export", Access.ADMIN),
+          new Route(HttpMethod.GET, "/.well-known/aduana-audit-key", Access.PUBLIC));
 
   /**
    * Prevents instances: the class only holds the table.

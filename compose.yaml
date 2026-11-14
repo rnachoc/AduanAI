@@ -35,6 +35,7 @@ services:
     environment:
       SPRING_CONFIG_IMPORT: optional:file:/etc/aduana/upstreams.yaml
       ADUANA_POLICY_DIRECTORY: /etc/aduana/policy
+      ADUANA_AUDIT_CHECKPOINT_EVERY: "20"
       ADUANA_DATABASE_URL: jdbc:postgresql://postgres:5432/aduana
       ADUANA_DATABASE_USER: ${POSTGRES_USER}
       ADUANA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD}

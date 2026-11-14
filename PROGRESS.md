@@ -7,7 +7,7 @@
 | 2 | Transparent proxy | done |
 | 3 | Identity and catalog | done |
 | 4 | Policy engine | done |
-| 5 | Verifiable log | not started |
+| 5 | Verifiable log | done |
 | 6 | Approvals | not started |
 | 7 | Redaction, injection flags and taint | not started |
 | 8 | Limits, idempotency and stdio servers | not started |
@@ -116,3 +116,28 @@ Done on branch `phase-04-policy`, merged into `main`.
 | CA4.5 median under 1 ms with 200 rules | met: median 4.4 µs, p99 13.2 µs (`make bench-policy`, 20 000 samples, 12 CPUs, Java 25.0.5) |
 | demo bundle ≥ 12 rules and ≥ 40 cases | met: 13 rules, 45 cases, `make policy-test` 45 passed |
 | e2e | met: `make e2e` 20 of 20 steps in both eras; the injected refund is denied and never reaches payments |
+
+## Phase 5: Verifiable log
+
+Done on branch `phase-05-audit`, merged into `main`.
+
+- `audit` module, tests first (RFC 8785 vectors, chain, checkpoints, six manipulations, property): `34977b3`,
+  code (`Jcs`, `HashChain`, `Checkpoints`, `ChainVerifier`): `e74d133`.
+- Gateway, tests first (`AuditLogTest`, 9 cases): `b885870`; `V3__audit_log.sql` (tables, role
+  `aduana_app`, append-only triggers), two pools, chained `EventLog`, `CALL_DECIDED` before forwarding,
+  `CALL_COMPLETED`/`CALL_FAILED`, signed checkpoints, `/api/v1/audit*`, `/.well-known/aduana-audit-key`: `fc0cbe1`.
+- `aduana audit verify|export`: `b4c5d02`. `verifier/verify_chain.py` (151 lines, stdlib only),
+  `verify_signatures.py` (optional `cryptography`), tests on a real export: `23304f1`.
+- `make audit-export`, `make audit-verify`, `make test-verifier`: `f4861a4`. `docs/audit-format.md`, ADR 6, 8, 11: `65a07a5`.
+
+| CA | Result |
+|---|---|
+| CA5.1 RFC 8785 vectors pass | met: `JcsTest` (24 Appendix B numbers, NaN/Infinity, §3.2.3 sorting, §3.2.4 bytes) and the same vectors in `test_verify_chain.py` |
+| CA5.2 six manipulations detected by both verifiers | met: Java `ChainVerifierTest` and Python `ChainTests` (edit, delete, reorder, insert, date change, truncation with exported checkpoints), plus a property test over 300 random edits |
+| CA5.3 50 threads, no gaps, no forks | met: `fifty_threads_appending_leave_no_gap_and_no_fork` (200 appends from 50 threads, distinct seqs, chain verifies) |
+| CA5.4 UPDATE/DELETE fail for the application role and for the owner | met: `the_application_role_cannot_update_or_delete_entries`, `even_the_owner_cannot_update_delete_or_truncate_entries` |
+| CA5.5 with the log unwritable, nothing reaches the upstream | met: `when_the_log_cannot_be_written_nothing_reaches_the_upstream` (INSERT revoked; `AUDIT_UNAVAILABLE`; upstream call count unchanged). A fully stopped database is not simulated |
+| CA5.6 verifier under 200 lines, stdlib only | met: `test_the_verifier_is_short_and_uses_only_the_standard_library` (151 lines) |
+| stack | met: `make audit-verify` on the demo stack: 84 entries, 2 checkpoints, intact in both verifiers, signatures checked |
+
+Coverage and mutation of `audit`: 95.91 % lines; PIT 91 of 100 mutants killed (91 %).

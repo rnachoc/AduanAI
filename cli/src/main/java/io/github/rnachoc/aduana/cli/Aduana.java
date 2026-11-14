@@ -25,7 +25,7 @@ import picocli.CommandLine.Spec;
     name = "aduana",
     mixinStandardHelpOptions = true,
     version = "aduana 0.1.0",
-    subcommands = {Aduana.Policy.class},
+    subcommands = {Aduana.Policy.class, AuditCommands.class},
     description = "Check Aduana policies and logs.")
 public final class Aduana implements Callable<Integer> {
 

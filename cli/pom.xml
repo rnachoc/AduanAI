@@ -24,6 +24,10 @@
       <groupId>io.github.rnachoc.aduana</groupId>
       <artifactId>aduana-policy</artifactId>
     </dependency>
+    <dependency>
+      <groupId>io.github.rnachoc.aduana</groupId>
+      <artifactId>aduana-audit</artifactId>
+    </dependency>
   </dependencies>
   <build>
     <finalName>aduana-cli</finalName>

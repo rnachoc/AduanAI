@@ -2,6 +2,9 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.support;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -32,9 +35,32 @@ public class TestDatabase {
   @Bean
   @ServiceConnection
   public PostgreSQLContainer postgres() {
+    return container();
+  }
+
+  /**
+   * Returns the shared container, started on first use.
+   *
+   * @return the running container
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public static PostgreSQLContainer container() {
     if (!CONTAINER.isRunning()) {
       CONTAINER.start();
     }
     return CONTAINER;
+  }
+
+  /**
+   * Opens a connection as the database owner, bypassing the application role.
+   *
+   * @return a new connection; the caller closes it
+   * @throws SQLException if the connection fails
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public static Connection ownerConnection() throws SQLException {
+    PostgreSQLContainer postgres = container();
+    return DriverManager.getConnection(
+        postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
   }
 }

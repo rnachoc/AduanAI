@@ -32,7 +32,7 @@ SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src
 DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo test-cli policy-test bench-policy mutation demo-direct e2e hooks secrets
+	test-policy test-audit test-gateway test-demo test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -59,8 +59,8 @@ lint: lint-image ## Run every static check: authorship, commits, formats, secret
 	$(LINT) python scripts/check_authorship.py
 	$(LINT) python scripts/check_commits.py --range HEAD
 	$(LINT) python scripts/check_pinned_images.py
-	$(LINT) ruff check scripts
-	$(LINT) ruff format --check scripts
+	$(LINT) ruff check scripts verifier
+	$(LINT) ruff format --check scripts verifier
 	$(LINT) yamllint -s -c build-config/yamllint.yaml .
 	$(RUN) $(SAFE_GIT) $(EDITORCONFIG_IMAGE)
 	$(RUN) $(SAFE_GIT) $(GITLEAKS_IMAGE) git --redact --no-banner /src
@@ -74,7 +74,7 @@ lint-fast: ## Secrets in the staged diff and authorship of staged files (the pre
 secrets: ## Scan the whole git history for secrets
 	$(RUN) $(SAFE_GIT) $(GITLEAKS_IMAGE) git --redact --no-banner /src
 
-test: test-scripts test-java test-demo ## Run every test suite
+test: test-scripts test-java test-demo test-verifier ## Run every test suite
 
 test-scripts: ## Test the repository scripts
 	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py'
@@ -88,6 +88,18 @@ test-policy: ## Test the policy module
 test-audit: ## Test the audit module
 	$(MAVEN) -pl audit verify
 
+test-verifier: ## Test the independent Python verifier (standard library only)
+	$(RUN) $(PYTHON_IMAGE) python -m unittest discover -s verifier -p 'test_*.py'
+
+audit-export: ## Export the running gateway's log, checkpoints and key to out/audit/
+	mkdir -p out/audit
+	$(MAVEN) -pl cli -am -DskipTests -Djacoco.skip=true package
+	docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src -w /src $(JDK_IMAGE) 		java -jar cli/target/aduana-cli.jar audit export --url http://gateway:8080 		-o out/audit/entries.jsonl --checkpoints-out out/audit/checkpoints.jsonl --key-out out/audit/key.json
+
+audit-verify: audit-export ## Verify the running gateway's log with both verifiers
+	$(CLI) audit verify --export out/audit/entries.jsonl --checkpoints out/audit/checkpoints.jsonl --key out/audit/key.json
+	$(RUN) $(PYTHON_IMAGE) python verifier/verify_chain.py out/audit/entries.jsonl --checkpoints out/audit/checkpoints.jsonl
+
 test-cli: ## Test the aduana command line
 	$(MAVEN) -pl cli -am verify
 
@@ -100,8 +112,8 @@ bench-policy: ## Time the evaluator on a 200-rule policy; writes policy/target/p
 	$(MAVEN) -pl policy -Dtest.excludedGroups= -Dgroups=benchmark -Djacoco.skip=true test
 	cat policy/target/policy-benchmark.txt
 
-mutation: ## Run PIT mutation tests on the policy module (threshold 80%)
-	$(MAVEN) -pl policy test-compile org.pitest:pitest-maven:mutationCoverage
+mutation: ## Run PIT mutation tests on the policy and audit modules (threshold 80%)
+	$(MAVEN) -pl policy,audit test-compile org.pitest:pitest-maven:mutationCoverage
 
 test-gateway: ## Test the gateway and the modules it depends on
 	$(MAVEN) -pl gateway -am verify
