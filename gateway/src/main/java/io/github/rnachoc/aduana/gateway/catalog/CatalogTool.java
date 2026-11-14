@@ -2,6 +2,7 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.catalog;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import tools.jackson.databind.JsonNode;
@@ -24,6 +25,7 @@ import tools.jackson.databind.JsonNode;
  * @param cost budget units charged per call
  * @param enabled whether the administrator allows it at all
  * @param state active, changed_pending_review, new_pending_review or removed
+ * @param descriptionFlags injection patterns found in the published description
  * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
  */
 public record CatalogTool(
@@ -40,7 +42,8 @@ public record CatalogTool(
     String sensitivity,
     int cost,
     boolean enabled,
-    String state) {
+    String state,
+    List<String> descriptionFlags) {
 
   /**
    * Tells whether agents may see and call the tool.

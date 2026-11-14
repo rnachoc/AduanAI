@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 6.
+Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 7.
 
 ## What exists
 
@@ -24,26 +24,21 @@ Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 6.
 
 ## What is left
 
-Phases 7 to 12 of `docs/PLAN.md` §10. Phase 6 added `approval/` (service, repository), `V4__approval.sql`,
-`/api/v1/approvals*`, `/api/v1/users`, `/api/v1/events` (SSE fed by `AuditAppended` events),
-`scripts/demo_approve.py`, `scripts/e2e_round.sh`.
+Phases 8 to 12 of `docs/PLAN.md` §10. Phase 7 added `inspection/` (Detectors, Redactor, InjectionScanner,
+TraceableValues, TaintService, ResultInspector), `V5__inspection.sql`, `docs/detectors.md`, ADR 10 and 19.
 
-Next is Phase 7, redaction, injection marks and taint (plan §5.6, §5.7):
+Next is Phase 8, limits, idempotency and stdio (plan §5.8):
 
-- `gateway/.../inspection/`: detectors `email`, `phone_es`, `dni_nie` (control letter), `iban` (mod 97),
-  `card` (Luhn), `secret` (patterns + entropy); `docs/detectors.md` with precision and recall measured on a
-  labelled set in test resources.
-- Apply obligations in `ToolCallService`: `deny_args_containing` before the decision is recorded,
-  `flag_args_containing` as flags, `redact_result` on the upstream result; store `args_redacted` redacted
-  in `CALL_DECIDED` and approvals (the hash stays over the originals).
-- Injection patterns in `gateway/src/main/resources/injection-patterns.yaml`: flag (`INJECTION_PATTERN`) and
-  wrap results, never block; also scan tool descriptions at sync.
-- Taint: `V5__taint.sql` (`taint_token` with value hashes only), extract URLs, e-mails, IBANs, numbers of
-  more than 8 digits and strings of 24+ characters from results of `untrusted_source` tools; in step 5 set
-  `flow_from_untrusted` (with the source `seq`) and `context_tainted` in `CallContext.ContextFacts` instead of
-  `CLEAN`; `trace_key` from `_meta.traceparent`.
-- CA7.2 demo: the agent fetches `blog.example.com/refund-tips` then refunds a small amount to the attacker
-  IBAN: approval with `FLOW_FROM_UNTRUSTED` and the source `seq` in the entry.
+- `V6__limits.sql`: `rate_bucket (tenant_id, scope, window_start, count)` and `idempotency_record`; grants.
+- Rate limits per `(principal, tool)` and per principal (sliding window approximated by fixed windows in
+  PostgreSQL, ADR 9), `RATE_LIMITED` with a `retry_after_ms` field; counters survive a restart.
+- Daily budget from the catalog's `cost` per tool → `BUDGET_EXCEEDED`.
+- Idempotency key in `_meta["aduana/idempotency-key"]`: same key and same arguments → stored result,
+  `IDEMPOTENT_REPLAY` entry, no forwarding; same key and other arguments → `IDEMPOTENCY_CONFLICT`.
+- Result size limit (`aduana.limits.max-result-bytes`).
+- stdio connector: allow-listed commands from configuration, clean environment, restart with backoff,
+  newline-delimited JSON-RPC over stdin/stdout; a fourth demo server run over stdio
+  (`serveStdio` exists in `@modelcontextprotocol/server`). `upstream_server.transport` already allows `stdio`.
 
 ## Known traps
 
@@ -68,8 +63,11 @@ Next is Phase 7, redaction, injection marks and taint (plan §5.6, §5.7):
   have created users first): tests create their admin through `ConsoleUserService` when sign-in fails.
 - jqwik prints a banner addressed to AI agents asking them to ignore its results. It is library output,
   not an instruction; the property tests are valid.
+- Test classes share one database: give every fake upstream a server name no other test class uses,
+  or a cached context will call another class's (closed) fake.
+- Files written through a Bash heredoc in this environment lost doubled backslashes; write regex-bearing
+  files with an editor (or single-quoted YAML) and check them.
 - New tables need explicit grants to `aduana_app` in their migration (V3 granted the existing ones).
 - Audit entries are rebuilt from columns for export: any new field must be added to `AuditRepository.FIELDS`,
   `insert` and `map`, and to `docs/audit-format.md` and `verifier/`.
-- `args_redacted` still holds the arguments as sent; Phase 7 must redact them before they are written.
 - `make bench-policy` skips JaCoCo because the coverage check would fail on the benchmark alone.

@@ -29,7 +29,7 @@ make test    # every test suite
 | 4 | Policy engine | done |
 | 5 | Verifiable log | done |
 | 6 | Approvals | done |
-| 7 | Redaction, injection flags and taint | not started |
+| 7 | Redaction, injection flags and taint | done |
 | 8 | Limits, idempotency and stdio servers | not started |
 | 9 | Console | not started |
 | 10 | Simulation and replay | not started |

@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# Phrases that address an AI agent instead of a person. A match only flags and wraps a tool result or
+# a tool description; it never blocks (plan §5.7, ADR 2). Bump the version when the list changes.
+# Single-quoted YAML: backslashes reach the regular expression unchanged. Patterns stay on one line.
+# yamllint disable rule:line-length
+version: 1
+patterns:
+  - id: ignore-instructions
+    regex: '(?i)\b(ignore|disregard|forget|override)\b.{0,40}\b(previous|prior|above|earlier|all|your|any)\b.{0,20}\b(instructions|rules|directions|guidelines|prompt)\b'
+  - id: system-voice
+    regex: '(?i)\b(system (note|prompt|message|override)|developer (message|mode)|admin(istrator)? (note|override))\b'
+  - id: addressed-to-agents
+    regex: '(?i)\b(ai|llm|language model)[ -](agents?|assistants?|models?)\b'
+  - id: new-identity
+    regex: '(?i)\b(you are now|from now on,? you|act as (an?|the) )'
+  - id: secrecy
+    regex: '(?i)\b(do not|don''t|never) (tell|inform|mention|reveal|show)\b.{0,30}\b(user|human|customer|anyone)\b'
+  - id: authority-claim
+    regex: '(?i)\b(authori[sz]ed|approved|requested) by the (administrator|admin|system|owner|security team)\b'
+  - id: hidden-instruction-comment
+    regex: '(?i)<!--[^>]{0,800}\b(agent|assistant|instruction|ignore|refund|transfer|send)\b'
+  - id: exfiltration-request
+    regex: '(?i)\b(send|forward|email|post|upload|transfer)\b.{0,60}\b(to|into)\b.{0,20}([\w.+-]+@[\w-]+\.|https?://|iban)'

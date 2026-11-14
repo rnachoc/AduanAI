@@ -83,7 +83,27 @@ public class Bootstrap implements ApplicationRunner {
       LOG.info("created the first administrator {}", adminEmail);
     }
     for (UpstreamServer upstream : properties.upstreams()) {
-      if (catalog.serverByName(Tenants.DEFAULT, upstream.name()).isEmpty()) {
+      Optional<CatalogServer> existing = catalog.serverByName(Tenants.DEFAULT, upstream.name());
+      boolean moved =
+          existing.isPresent()
+              && (!existing.get().endpoint().equals(upstream.endpoint().toString())
+                  || !existing.get().timeout().equals(upstream.timeout()));
+      if (moved) {
+        // Configuration is the source of truth for the servers it lists.
+        CatalogServer current = existing.get();
+        catalog.update(
+            Tenants.DEFAULT,
+            current.id(),
+            new CatalogService.ServerRequest(
+                current.name(),
+                upstream.endpoint().toString(),
+                Optional.empty(),
+                current.strict(),
+                current.status(),
+                upstream.timeout()),
+            Optional.empty());
+      }
+      if (existing.isEmpty()) {
         catalog.register(
             Tenants.DEFAULT,
             new CatalogService.ServerRequest(
