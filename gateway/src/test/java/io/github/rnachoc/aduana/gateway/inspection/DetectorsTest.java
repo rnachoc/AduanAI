@@ -119,7 +119,7 @@ class DetectorsTest {
             "token gh" + "p_" + "q4Bv9Xz2LmN7kT1rW8yH3sD6fJ0pA5cE2uGi",
             List.of("secret"),
             Redactor.Style.WITH_HINT,
-            new TreeSet<>()); // gitleaks:allow
+            new TreeSet<>());
     assertThat(token).isEqualTo("token [REDACTED:secret]");
     assertThat(Redactor.detect(JSON.readTree("[\"+34 600 000 001\"]"), Detectors.IDS))
         .containsExactly("phone_es");
