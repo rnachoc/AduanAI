@@ -38,7 +38,7 @@ Every entry has all of these fields; absent values are JSON `null`, empty lists 
 | `principal_id` | string (UUID) or null | The agent the entry is about |
 | `server`, `tool` | string or null | Server name and agent-facing tool name `<server>__<tool>` |
 | `args_hash` | string or null | Hex SHA-256 of the canonical form (below) of the call's original arguments |
-| `args_redacted` | object or null | The arguments after redaction; for administration events, their details |
+| `args_redacted` | object or null | The arguments with every detector's matches replaced by `[REDACTED:<id>:<hint>]` (ADR 19); for administration events, their details |
 | `decision` | string or null | `allow`, `require_approval` or `deny` |
 | `rule_ids` | array of strings | The policy rules that matched |
 | `reason_code` | string or null | Why: a deny's reason, a failure code, an administration action |
@@ -46,7 +46,7 @@ Every entry has all of these fields; absent values are JSON `null`, empty lists 
 | `approval_id` | string (UUID) or null | The approval involved |
 | `actor_id` | string (UUID) or null | The console user behind an administration event |
 | `result_hash` | string or null | Hex SHA-256 of the canonical tool result; for `CHECKPOINT`, the checkpointed hash |
-| `flags` | array of strings | Marks such as `POLICY_TYPE_MISMATCH`, `FLOW_FROM_UNTRUSTED`, `REDACTED` |
+| `flags` | array of strings | Marks: `POLICY_TYPE_MISMATCH`, `REDACTED`, `SENSITIVE_<DETECTOR>`, `CONTEXT_TAINTED`, `FLOW_FROM_UNTRUSTED`, `TAINT_SOURCE:<argument path>:seq=<seq>`, `INJECTION_PATTERN`, `INJECTION_PATTERN:<pattern>:v<version>` |
 | `latency_ms` | integer or null | Time the upstream call took |
 | `prev_hash` | string | The previous entry's `hash`; 64 zeros (`000…0`) for `seq` 1 |
 | `hash` | string | See below |
