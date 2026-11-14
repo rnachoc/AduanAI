@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+version: 1
+defaults:
+  decision: deny
+rules:
+  - id: untrusted-flow-into-side-effects
+    match:
+      tool: { side_effect: true }
+      context: { flow_from_untrusted: true }
+    effect: require_approval
+    approval: { approvers_group: security, expires_in: 15m }
+  - id: web-read
+    match:
+      tool: { server: iweb, name: fetch }
+    effect: allow
+  - id: crm-read
+    match:
+      tool: { server: icrm, name: lookup }
+    effect: allow
+    obligations: { redact_result: [email, phone_es, iban] }
+  - id: crm-notes
+    match:
+      tool: { server: icrm, name: note }
+    effect: allow
+    obligations: { deny_args_containing: [card, secret], flag_args_containing: [email] }
+  - id: small-payments
+    match:
+      tool: { server: ibank, name: pay }
+      args:
+        - { path: "$.amount", lte: 100 }
+    effect: allow

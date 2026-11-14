@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The labelled set the detectors are measured on (docs/detectors.md). Every value is a test value:
+# example.com mail, placeholder phones, DNIs computed for this file, IBANs with the non-existent
+# country XX or the published ISO 13616 examples, card test numbers, and fake tokens in real formats.
+# A positive must be found exactly; a negative must not be reported at all.
+email:
+  positives:
+    - "write to ana@example.com today"
+    - "carla.ficticia+orders@sub.example.com"
+    - "Reply-To: soporte@example.com"
+    - "x@example.com"
+    - "user_name-1@mail.example.com,"
+    - "<bruno@example.com>"
+    - "first.last@example.com."
+    - "o'neil@example.com"
+    - "MAYUS@EXAMPLE.COM"
+    - "id 42: dev@ex-ample.com"
+  negatives:
+    - "ana at example dot com"
+    - "@example.com"
+    - "ana@"
+    - "ana@localhost"
+    - "ana@example"
+    - ".ana@example.com"
+    - "ana..b@example.com"
+    - "price 10@ 3 units"
+    - "user@.example.com"
+    - "a@b.c"
+phone_es:
+  positives:
+    - "+34 600 000 001"
+    - "call 600000002 now"
+    - "0034 700 000 003"
+    - "+34-800-000-004"
+    - "tel: 900 000 005"
+    - "600.000.006"
+    - "(+34) 611 000 007"
+    - "622000008"
+    - "+34633000009"
+    - "the line 944 000 010 is open"
+  negatives:
+    - "500 000 001"
+    - "100000001"
+    - "60000000"
+    - "6000000011"
+    - "+33 600 000 001"
+    - "order 1600000001"
+    - "12/06/2026"
+    - "4111111111111111"
+    - "600 000"
+    - "IBAN XX4300000000000000001234"
+dni_nie:
+  positives:
+    - "DNI 12345678Z"
+    - "00000001R"
+    - "87654321X."
+    - "nif: 11111111H"
+    - "23456789-D"
+    - "NIE X1234567L"
+    - "Y7654321G"
+    - "z0000001y"
+    - "(12345678Z)"
+    - "doc 87654321x"
+  negatives:
+    - "12345678S"
+    - "00000001W"
+    - "87654321B"
+    - "11111111L"
+    - "23456789X"
+    - "X1234567R"
+    - "Y7654321D"
+    - "Z0000001B"
+    - "1234567Z"
+    - "W1234567L"
+iban:
+  positives:
+    - "XX4300000000000000001234"
+    - "pay to XX4400000000000000005678 please"
+    - "XX65AB12CD34EF56GH78IJ90"
+    - "XX43 0000 0000 0000 0000 1234"
+    - "GB82WEST12345698765432"
+    - "GB82 WEST 1234 5698 7654 32"
+    - "DE89370400440532013000"
+    - "DE89 3704 0044 0532 0130 00"
+    - "account: XX2000000000000000666001."
+    - "XX7900000000000000000101,XX6800000000000000000202"
+  negatives:
+    - "XX4300000000000000001235"
+    - "XX4400000000000000005679"
+    - "GB82WEST12345698765433"
+    - "DE89370400440532013001"
+    - "XX43000000"
+    - "xx4300000000000000001234"
+    - "GB00WEST12345698765432"
+    - "ORDER-2026-000000001234"
+    - "ES0000000000000000000000"
+    - "DE89 3704 0044 0532 0130 01"
+card:
+  positives:
+    - "4111111111111111"
+    - "4111 1111 1111 1111"
+    - "4242-4242-4242-4242"
+    - "5555555555554444"
+    - "378282246310005"
+    - "card: 6011111111111117."
+    - "3056930009020004"
+    - "4000056655665556"
+    - "5200828282828210"
+    - "2223003122003222"
+  negatives:
+    - "4111111111111112"
+    - "4242424242424241"
+    - "5555555555554445"
+    - "123456789012"
+    - "1234567890123456"
+    - "4111 1111 1111 111"
+    - "order 2026111411111111"
+    - "+34 600 000 001"
+    - "XX4300000000000000001234"
+    - "00000000000000000001"
+secret:
+  positives:
+    - "AKIAQX3NZ5T2VJ7KLW4P"  # gitleaks:allow
+    - "token ghp_q4Bv9Xz2LmN7kT1rW8yH3sD6fJ0pA5cE2uGi"  # gitleaks:allow
+    - "xoxb-2048-0000-q4Bv9Xz2LmN7kT1rW8yH"  # gitleaks:allow
+    - "sk_live_q4Bv9Xz2LmN7kT1rW8yH3sD6"  # gitleaks:allow
+    - "AIzaq4Bv9Xz2LmN7kT1rW8yH3sD6fJ0pA5cE2u_"  # gitleaks:allow
+    - "-----BEGIN RSA PRIVATE KEY-----"  # gitleaks:allow
+    - "adn_q4Bv9Xz2LmN7kT1rW8yH3sD6fJ0pA5cE2uGiOk9X"  # gitleaks:allow
+    - "password=Zq4Bv9Xz2LmN7kT1rW8yH3sD6"  # gitleaks:allow
+    - "api_key: \"q4Bv9Xz2LmN7kT1rW8yH3sD6fJ\""  # gitleaks:allow
+    - "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.q4Bv9Xz2LmN7kT1rW8yH3sD6"  # gitleaks:allow
+  negatives:
+    - "AKIA is a prefix"
+    - "ghp_short"
+    - "password=aaaaaaaaaaaaaaaaaaaaaaaa"
+    - "token: 1111111111111111111111111"
+    - "the api_key field is required"
+    - "sk_test_q4Bv9Xz2LmN7kT1rW8yH3sD6"  # gitleaks:allow
+    - "-----BEGIN PUBLIC KEY-----"
+    - "secret = short"
+    - "TRACK-0000-1111-2222-3333-4444-5555"
+    - "xoxb-"
