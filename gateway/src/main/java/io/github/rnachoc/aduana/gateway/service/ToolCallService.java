@@ -2,6 +2,8 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.gateway.service;
 
+import io.github.rnachoc.aduana.gateway.audit.AuditLog;
+import io.github.rnachoc.aduana.gateway.audit.AuditRecord;
 import io.github.rnachoc.aduana.gateway.catalog.ArgumentValidator;
 import io.github.rnachoc.aduana.gateway.catalog.CatalogService;
 import io.github.rnachoc.aduana.gateway.config.AduanaProperties;
@@ -16,8 +18,10 @@ import io.github.rnachoc.aduana.gateway.upstream.UpstreamServer;
 import io.github.rnachoc.aduana.policy.CallContext;
 import io.github.rnachoc.aduana.policy.Decision;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -42,6 +46,7 @@ public class ToolCallService {
   private final CatalogService catalog;
   private final ArgumentValidator validator;
   private final PolicyService policies;
+  private final AuditLog audit;
   private final UpstreamClient upstreams;
   private final AgentErrors errors;
   private final JsonMapper json;
@@ -53,6 +58,7 @@ public class ToolCallService {
    * @param catalog the catalog
    * @param validator checks arguments against pinned schemas
    * @param policies decides calls with the active policy
+   * @param audit records every decision before anything is forwarded
    * @param upstreams the upstream client
    * @param errors builds agent-facing errors
    * @param json the shared JSON mapper
@@ -63,6 +69,7 @@ public class ToolCallService {
       CatalogService catalog,
       ArgumentValidator validator,
       PolicyService policies,
+      AuditLog audit,
       UpstreamClient upstreams,
       AgentErrors errors,
       JsonMapper json) {
@@ -70,6 +77,7 @@ public class ToolCallService {
     this.catalog = catalog;
     this.validator = validator;
     this.policies = policies;
+    this.audit = audit;
     this.upstreams = upstreams;
     this.errors = errors;
     this.json = json;
@@ -86,38 +94,49 @@ public class ToolCallService {
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public JsonNode call(Principal principal, ObjectNode params) {
-    ToolName name =
-        ToolName.parse(params.path("name").asString("")).orElseThrow(errors::toolNotFound);
-    CatalogService.OfferedTool offered =
-        catalog
-            .offeredTool(principal.tenantId(), name.server(), name.tool())
-            .orElseThrow(errors::toolNotFound);
+    String requested = params.path("name").asString("");
+    Optional<CatalogService.OfferedTool> found =
+        ToolName.parse(requested)
+            .flatMap(name -> catalog.offeredTool(principal.tenantId(), name.server(), name.tool()));
+    if (found.isEmpty()) {
+      record(
+          principal,
+          AuditRecord.of("TOOL_NOT_FOUND").principal(principal.id()).tool(null, requested));
+      throw errors.toolNotFound();
+    }
+    CatalogService.OfferedTool offered = found.get();
+    ToolName name = new ToolName(offered.server().name(), offered.tool().name());
     JsonNode arguments = params.path("arguments");
-    if (!arguments.isMissingNode() && !arguments.isObject()) {
+    Optional<ObjectNode> valid = validArguments(offered, arguments);
+    if (valid.isEmpty()) {
+      record(
+          principal,
+          AuditRecord.of("ARGS_INVALID")
+              .principal(principal.id())
+              .tool(name.server(), name.qualified()));
       return errors.toolResult(AgentErrorCode.ARGS_INVALID);
     }
-    ObjectNode forwardedArguments =
-        arguments.isObject() ? (ObjectNode) arguments : json.createObjectNode();
-    if (json.writeValueAsBytes(forwardedArguments).length
-        > properties.limits().maxArgumentsBytes()) {
-      return errors.toolResult(AgentErrorCode.ARGS_INVALID);
-    }
-    List<String> problems =
-        validator.validate(offered.tool(), forwardedArguments, offered.server().strict());
-    if (!problems.isEmpty()) {
-      return errors.toolResult(AgentErrorCode.ARGS_INVALID);
-    }
+    ObjectNode forwardedArguments = valid.get();
     PolicyService.Decided decided =
         policies.decide(
             principal, offered.tool(), forwardedArguments, CallContext.ContextFacts.CLEAN);
     Decision decision = decided.decision();
-    if (decision instanceof Decision.Deny deny) {
-      LOG.info(
-          "denied {} for {}: {} by {}",
-          name.qualified(),
-          principal.name(),
-          deny.reasonCode(),
-          deny.matchedRules());
+    AuditRecord.Builder intent =
+        AuditRecord.of("CALL_DECIDED")
+            .principal(principal.id())
+            .tool(name.server(), name.qualified())
+            .arguments(AuditLog.hashOf(forwardedArguments), forwardedArguments)
+            .decision(
+                decision.effect().yamlName(),
+                decision.matchedRules(),
+                decision.reason().orElse(null),
+                decided.bundleSha256())
+            .flags(
+                decision.typeMismatches().isEmpty() ? List.of() : List.of("POLICY_TYPE_MISMATCH"));
+    if (!record(principal, intent)) {
+      return errors.toolResult(AgentErrorCode.AUDIT_UNAVAILABLE);
+    }
+    if (decision instanceof Decision.Deny) {
       return errors.toolResult(AgentErrorCode.POLICY_DENIED);
     }
     if (decision instanceof Decision.RequireApproval) {
@@ -127,35 +146,131 @@ public class ToolCallService {
     forward.put("name", name.tool());
     forward.set("arguments", forwardedArguments);
     UpstreamServer server = offered.server().upstream();
-    return interpret(server, upstreams.send(server, "tools/call", forward, offered.credential()));
+    long started = System.nanoTime();
+    UpstreamResponse response = upstreams.send(server, "tools/call", forward, offered.credential());
+    long latency = (System.nanoTime() - started) / 1_000_000;
+    return complete(principal, name, decided.bundleSha256(), server, response, latency);
   }
 
   /**
-   * Maps the upstream's answer to what the agent receives.
+   * Checks the arguments: an object, within the size limit, valid against the pinned schema.
    *
-   * @param server the upstream, for the operator log
+   * @param offered the tool
+   * @param arguments the arguments as sent
+   * @return the arguments to forward, or empty when they are invalid
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Optional<ObjectNode> validArguments(
+      CatalogService.OfferedTool offered, JsonNode arguments) {
+    if (!arguments.isMissingNode() && !arguments.isObject()) {
+      return Optional.empty();
+    }
+    ObjectNode object = arguments.isObject() ? (ObjectNode) arguments : json.createObjectNode();
+    if (json.writeValueAsBytes(object).length > properties.limits().maxArgumentsBytes()) {
+      return Optional.empty();
+    }
+    List<String> problems = validator.validate(offered.tool(), object, offered.server().strict());
+    return problems.isEmpty() ? Optional.of(object) : Optional.empty();
+  }
+
+  /**
+   * Appends an entry, reporting instead of throwing when the log is unavailable.
+   *
+   * @param principal the caller, for the tenant
+   * @param record the entry
+   * @return true when the entry was recorded
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private boolean record(Principal principal, AuditRecord.Builder record) {
+    try {
+      audit.append(principal.tenantId(), record.build());
+      return true;
+    } catch (DataAccessException exception) {
+      LOG.error(
+          "audit log unavailable, nothing forwarded: {}",
+          exception.getMostSpecificCause().getMessage());
+      return false;
+    }
+  }
+
+  /**
+   * Records how the forwarded call ended and maps the upstream's answer for the agent.
+   *
+   * @param principal the caller
+   * @param name the tool
+   * @param bundle the bundle that allowed the call
+   * @param server the upstream
    * @param response the upstream's answer
+   * @param latency milliseconds the upstream took
    * @return the agent-facing result
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  private JsonNode interpret(UpstreamServer server, UpstreamResponse response) {
-    return switch (response) {
-      case UpstreamResponse.Result(JsonNode result) -> result;
+  private JsonNode complete(
+      Principal principal,
+      ToolName name,
+      String bundle,
+      UpstreamServer server,
+      UpstreamResponse response,
+      long latency) {
+    AuditRecord.Builder outcome =
+        AuditRecord.of("CALL_COMPLETED")
+            .principal(principal.id())
+            .tool(name.server(), name.qualified())
+            .bundle(bundle);
+    JsonNode result;
+    boolean unknownTool = false;
+    switch (response) {
+      case UpstreamResponse.Result(JsonNode value) -> {
+        outcome.result(AuditLog.hashOf(value), latency);
+        result = value;
+      }
       case UpstreamResponse.RpcError(int code, String message)
-          when code == McpProtocol.INVALID_PARAMS && message.startsWith("Unknown tool") ->
-          throw errors.toolNotFound();
+          when code == McpProtocol.INVALID_PARAMS && message.startsWith("Unknown tool") -> {
+        outcome = failed(principal, name, bundle, "TOOL_NOT_FOUND", latency);
+        unknownTool = true;
+        result = json.nullNode();
+      }
       case UpstreamResponse.RpcError(int code, String message) -> {
         LOG.warn("upstream {} answered error {}", server.name(), code);
-        yield errors.toolResult(AgentErrorCode.UPSTREAM_ERROR);
+        outcome = failed(principal, name, bundle, "UPSTREAM_ERROR", latency);
+        result = errors.toolResult(AgentErrorCode.UPSTREAM_ERROR);
       }
       case UpstreamResponse.Unavailable(String detail) -> {
         LOG.warn("upstream {} unavailable: {}", server.name(), detail);
-        yield errors.toolResult(AgentErrorCode.UPSTREAM_ERROR);
+        outcome = failed(principal, name, bundle, "UPSTREAM_ERROR", latency);
+        result = errors.toolResult(AgentErrorCode.UPSTREAM_ERROR);
       }
       case UpstreamResponse.TimedOut() -> {
         LOG.warn("upstream {} timed out after {}", server.name(), server.timeout());
-        yield errors.toolResult(AgentErrorCode.UPSTREAM_TIMEOUT);
+        outcome = failed(principal, name, bundle, "UPSTREAM_TIMEOUT", latency);
+        result = errors.toolResult(AgentErrorCode.UPSTREAM_TIMEOUT);
       }
-    };
+    }
+    record(principal, outcome);
+    if (unknownTool) {
+      throw errors.toolNotFound();
+    }
+    return result;
+  }
+
+  /**
+   * Starts a `CALL_FAILED` entry.
+   *
+   * @param principal the caller
+   * @param name the tool
+   * @param bundle the bundle that allowed the call
+   * @param reason the failure code
+   * @param latency milliseconds spent
+   * @return the entry builder
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private static AuditRecord.Builder failed(
+      Principal principal, ToolName name, String bundle, String reason, long latency) {
+    return AuditRecord.of("CALL_FAILED")
+        .principal(principal.id())
+        .tool(name.server(), name.qualified())
+        .bundle(bundle)
+        .reason(reason)
+        .latency(latency);
   }
 }
