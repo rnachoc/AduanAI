@@ -27,5 +27,43 @@ services:
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8780}:8080"
 
+  crm: &demo-server
+    build:
+      context: .
+      dockerfile: demo/Dockerfile
+    image: aduana-demo:local
+    command: ["node", "dist/servers/crm/server.js"]
+    environment:
+      PORT: "3001"
+      ALLOWED_HOSTS: crm,localhost,127.0.0.1
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:'+process.env.PORT+'/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  payments:
+    <<: *demo-server
+    command: ["node", "dist/servers/payments/server.js"]
+    environment:
+      PORT: "3002"
+      ALLOWED_HOSTS: payments,localhost,127.0.0.1
+
+  webfetch:
+    <<: *demo-server
+    command: ["node", "dist/servers/webfetch/server.js"]
+    environment:
+      PORT: "3003"
+      ALLOWED_HOSTS: webfetch,localhost,127.0.0.1
+
+  agent:
+    image: aduana-demo:local
+    profiles: ["tools"]
+    entrypoint: ["node", "dist/agent/agent.js"]
+
 volumes:
   postgres-data:
