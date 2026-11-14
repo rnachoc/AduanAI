@@ -45,7 +45,8 @@ import tools.jackson.databind.node.ObjectNode;
     properties = {
       "aduana.limits.max-arguments-bytes=1024",
       "aduana.master-key=local-only",
-      "aduana.catalog.sync-interval=PT1H"
+      "aduana.catalog.sync-interval=PT1H",
+      "aduana.policy.directory=src/test/resources/policies/allow-all"
     })
 @Import(TestDatabase.class)
 class ProxyEndpointTest {

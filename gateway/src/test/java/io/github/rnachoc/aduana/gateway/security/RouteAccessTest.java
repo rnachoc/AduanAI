@@ -23,7 +23,12 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
  *
  * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
  */
-@SpringBootTest(properties = {"aduana.master-key=local-only", "aduana.catalog.sync-interval=PT1H"})
+@SpringBootTest(
+    properties = {
+      "aduana.master-key=local-only",
+      "aduana.catalog.sync-interval=PT1H",
+      "aduana.policy.directory=src/test/resources/policies/allow-all"
+    })
 @Import(TestDatabase.class)
 class RouteAccessTest {
 

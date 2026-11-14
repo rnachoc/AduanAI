@@ -49,7 +49,11 @@ import tools.jackson.databind.node.ObjectNode;
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"aduana.master-key=local-only", "aduana.catalog.sync-interval=PT1H"})
+    properties = {
+      "aduana.master-key=local-only",
+      "aduana.catalog.sync-interval=PT1H",
+      "aduana.policy.directory=src/test/resources/policies/allow-all"
+    })
 @Import(TestDatabase.class)
 @ExtendWith(OutputCaptureExtension.class)
 class IdentityAndCatalogTest {
@@ -117,7 +121,10 @@ class IdentityAndCatalogTest {
   void setUp() {
     URI base = URI.create("http://127.0.0.1:" + port);
     admin = new ApiTestClient(base);
-    assertThat(admin.login(ADMIN, PASSWORD).status()).isEqualTo(200);
+    if (admin.login(ADMIN, PASSWORD).status() != 200) {
+      users.create(Tenants.DEFAULT, ADMIN, PASSWORD, ConsoleUser.Role.ADMIN);
+      assertThat(admin.login(ADMIN, PASSWORD).status()).isEqualTo(200);
+    }
     if (serverId("files").isEmpty()) {
       ApiTestClient.Reply created =
           admin.send(

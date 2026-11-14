@@ -18,7 +18,11 @@ import org.springframework.context.annotation.Import;
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"aduana.master-key=local-only", "aduana.catalog.sync-interval=PT1H"})
+    properties = {
+      "aduana.master-key=local-only",
+      "aduana.catalog.sync-interval=PT1H",
+      "aduana.policy.directory=src/test/resources/policies/allow-all"
+    })
 @Import(TestDatabase.class)
 class HealthEndpointTest {
 

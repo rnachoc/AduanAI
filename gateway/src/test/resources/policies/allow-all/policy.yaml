@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# For tests about transport and catalog, not about policy: every catalog tool is allowed.
+version: 1
+defaults:
+  decision: deny
+rules:
+  - id: allow-everything-in-tests
+    match: {}
+    effect: allow

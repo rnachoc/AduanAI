@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+version: 1
+defaults:
+  decision: deny
+rules:
+  - id: support-reads
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: shop, name: read }
+    effect: allow
+  - id: payments-need-approval
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: shop, name: pay }
+    effect: require_approval
+  - id: secret-payment-limit-of-one-hundred
+    match:
+      tool: { server: shop, name: pay }
+      args: [ { path: "$.amount", gt: 100 } ]
+    effect: deny
+    reason_code: PAYMENT_OVER_LIMIT
+  - id: hidden-is-never-allowed
+    match:
+      tool: { server: shop, name: hidden }
+    effect: deny
+  - id: hidden-would-be-allowed
+    match:
+      tool: { server: shop, name: hidden }
+    effect: allow
