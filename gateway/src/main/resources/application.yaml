@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+spring:
+  application:
+    name: aduana-gateway
+  threads:
+    virtual:
+      enabled: true
+  main:
+    banner-mode: "off"
+server:
+  port: 8080
+  shutdown: graceful

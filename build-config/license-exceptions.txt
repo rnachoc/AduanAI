@@ -1,0 +1,2 @@
+# Dependencies whose POM or package.json declares no licence, with the reason they are allowed.
+# Format: group:artifact (or npm package name), a space, then the reason and its source.

@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!--
+  SPDX-License-Identifier: Apache-2.0
+  Copyright 2026 Ignacio Rodríguez Caro
+-->
+<!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<module name="Checker">
+  <property name="charset" value="UTF-8"/>
+  <property name="severity" value="error"/>
+  <module name="FileTabCharacter"/>
+  <module name="NewlineAtEndOfFile"/>
+  <module name="RegexpSingleline">
+    <property name="format" value="\bTODO\b(?!\(#\d+\))"/>
+    <property name="message" value="A TODO needs an issue number: TODO(#123)."/>
+  </module>
+  <module name="RegexpSingleline">
+    <property name="format" value="Instant\.now\(\)|LocalDateTime\.now\(\)|System\.currentTimeMillis\(\)"/>
+    <property name="message" value="Read time from an injected java.time.Clock."/>
+  </module>
+  <module name="TreeWalker">
+    <module name="AvoidStarImport"/>
+    <module name="UnusedImports"/>
+    <module name="RedundantImport"/>
+    <module name="NeedBraces"/>
+    <module name="EmptyCatchBlock"/>
+    <module name="EqualsHashCode"/>
+    <module name="MissingSwitchDefault"/>
+    <module name="FallThrough"/>
+    <module name="OneStatementPerLine"/>
+    <module name="MultipleVariableDeclarations"/>
+    <module name="SimplifyBooleanExpression"/>
+    <module name="StringLiteralEquality"/>
+    <module name="IllegalCatch">
+      <property name="illegalClassNames" value="java.lang.Throwable, java.lang.Error"/>
+    </module>
+    <module name="IllegalImport">
+      <property name="illegalPkgs" value="lombok, org.mapstruct, jakarta.persistence, org.hibernate"/>
+    </module>
+  </module>
+</module>
