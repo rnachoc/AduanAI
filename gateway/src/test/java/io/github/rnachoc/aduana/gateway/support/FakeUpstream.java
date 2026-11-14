@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Ignacio Rodríguez Caro
-package io.github.rnachoc.aduana.gateway;
+package io.github.rnachoc.aduana.gateway.support;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -76,20 +76,37 @@ public final class FakeUpstream implements AutoCloseable {
   }
 
   /**
-   * Adds a tool that echoes its arguments back as structured content.
+   * Adds (or replaces) a tool that echoes its arguments back as structured content.
    *
    * @param name the tool name
    * @param description the description published in tools/list
+   * @param properties the string properties its input schema declares
    * @return this server, for chaining
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public FakeUpstream withEchoTool(String name, String description) {
+  public FakeUpstream withEchoTool(String name, String description, String... properties) {
     ObjectNode tool = JSON.createObjectNode();
     tool.put("name", name);
     tool.put("description", description);
     ObjectNode schema = tool.putObject("inputSchema");
     schema.put("type", "object");
+    ObjectNode declared = schema.putObject("properties");
+    for (String property : properties) {
+      declared.putObject(property).put("type", "string");
+    }
     tools.put(name, tool);
+    return this;
+  }
+
+  /**
+   * Removes a tool from the published list.
+   *
+   * @param name the tool name
+   * @return this server, for chaining
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public FakeUpstream withoutTool(String name) {
+    tools.remove(name);
     return this;
   }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Ignacio Rodríguez Caro
-package io.github.rnachoc.aduana.gateway;
+package io.github.rnachoc.aduana.gateway.support;
 
 import java.io.IOException;
 import java.net.URI;

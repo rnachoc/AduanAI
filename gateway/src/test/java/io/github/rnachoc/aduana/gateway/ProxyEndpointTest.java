@@ -4,6 +4,11 @@ package io.github.rnachoc.aduana.gateway;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.rnachoc.aduana.gateway.identity.PrincipalService;
+import io.github.rnachoc.aduana.gateway.support.Agents;
+import io.github.rnachoc.aduana.gateway.support.FakeUpstream;
+import io.github.rnachoc.aduana.gateway.support.McpTestClient;
+import io.github.rnachoc.aduana.gateway.support.TestDatabase;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamClient;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -22,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
@@ -36,18 +42,26 @@ import tools.jackson.databind.node.ObjectNode;
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"aduana.limits.max-arguments-bytes=1024"})
+    properties = {
+      "aduana.limits.max-arguments-bytes=1024",
+      "aduana.master-key=local-only",
+      "aduana.catalog.sync-interval=PT1H"
+    })
+@Import(TestDatabase.class)
 class ProxyEndpointTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
-  private static final FakeUpstream CRM = start().withEchoTool("get_customer", "Get a customer.");
+  private static final FakeUpstream CRM =
+      start().withEchoTool("get_customer", "Get a customer.", "customer_id", "blob");
   private static final FakeUpstream PAYMENTS =
-      start().withEchoTool("refund", "Refund an order.").withSseResponses();
+      start().withEchoTool("refund", "Refund an order.", "order_id").withSseResponses();
   private static final FakeUpstream SLOW =
       start().withEchoTool("wait", "Takes long.").withDelay(Duration.ofSeconds(5));
+  private static final FakeUpstream GONE = start().withEchoTool("anything", "Goes away.");
 
   @LocalServerPort private int port;
   @Autowired private UpstreamClient upstreamClient;
+  @Autowired private PrincipalService principals;
   private McpTestClient client;
 
   /**
@@ -65,21 +79,19 @@ class ProxyEndpointTest {
   }
 
   /**
-   * Points the gateway at the fake upstreams and at one address where nothing listens.
+   * Points the gateway at the fake upstreams; `down` is stopped by the test that needs it gone.
    *
    * @param registry the Spring test property registry
-   * @throws IOException if no free port can be probed
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   @DynamicPropertySource
-  static void upstreams(DynamicPropertyRegistry registry) throws IOException {
-    String down = FakeUpstream.unreachableUrl();
+  static void upstreams(DynamicPropertyRegistry registry) {
     List<Map.Entry<String, String>> servers =
         List.of(
             Map.entry("crm", CRM.url()),
             Map.entry("payments", PAYMENTS.url()),
             Map.entry("slow", SLOW.url()),
-            Map.entry("down", down));
+            Map.entry("down", GONE.url()));
     for (int index = 0; index < servers.size(); index++) {
       String prefix = "aduana.upstreams[" + index + "].";
       registry.add(prefix + "name", servers.get(index)::getKey);
@@ -101,13 +113,16 @@ class ProxyEndpointTest {
   }
 
   /**
-   * Opens a test client on the gateway before each test.
+   * Opens a test client with a fresh agent key before each test.
    *
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   @BeforeEach
   void connect() {
-    client = new McpTestClient(URI.create("http://127.0.0.1:" + port + "/mcp"));
+    String key = Agents.agentKey(principals, Map.of("team", "support"));
+    client =
+        new McpTestClient(URI.create("http://127.0.0.1:" + port + "/mcp"))
+            .withHeader("Authorization", "Bearer " + key);
   }
 
   /**
@@ -186,6 +201,7 @@ class ProxyEndpointTest {
 
   @Test
   void an_upstream_that_is_down_gives_upstream_error() {
+    GONE.close();
     JsonNode reply = client.callTool("down__anything", arguments()).body();
     assertThat(reply.path("result").path("isError").asBoolean()).isTrue();
     assertThat(reply.path("result").path("structuredContent").path("code").asString())
