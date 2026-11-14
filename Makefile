@@ -24,13 +24,15 @@ PYTHON := $(RUN) $(PYTHON_IMAGE) python
 LINT := $(RUN) $(SAFE_GIT) $(LINT_IMAGE)
 NODE := docker run --rm -v "$(CURDIR)":/src -v aduana-npm:/root/.npm -w /src/demo $(NODE_IMAGE)
 SCENARIOS := scenarios/support-happy-path.yaml scenarios/injected-refund-direct.yaml
+GATEWAY_SCENARIOS := scenarios/gateway/support-through-aduana.yaml scenarios/gateway/injected-refund-through-aduana.yaml
+CLI := docker run --rm -v "$(CURDIR)":/src -w /src $(JDK_IMAGE) java -jar cli/target/aduana-cli.jar
 GATEWAY_MCP := http://gateway:8080/mcp
 SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src -w /src \
 	$(PYTHON_IMAGE) python scripts/demo_seed.py http://gateway:8080
 DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo demo-direct e2e hooks secrets
+	test-policy test-audit test-gateway test-demo test-cli policy-test bench-policy mutation demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -86,6 +88,21 @@ test-policy: ## Test the policy module
 test-audit: ## Test the audit module
 	$(MAVEN) -pl audit verify
 
+test-cli: ## Test the aduana command line
+	$(MAVEN) -pl cli -am verify
+
+policy-test: ## Validate the demo policy and run its test cases with the aduana CLI
+	$(MAVEN) -pl cli -am -DskipTests package
+	$(CLI) policy validate demo/policy
+	$(CLI) policy test demo/policy
+
+bench-policy: ## Time the evaluator on a 200-rule policy; writes policy/target/policy-benchmark.txt
+	$(MAVEN) -pl policy -Dtest.excludedGroups= -Dgroups=benchmark -Djacoco.skip=true test
+	cat policy/target/policy-benchmark.txt
+
+mutation: ## Run PIT mutation tests on the policy module (threshold 80%)
+	$(MAVEN) -pl policy test-compile org.pitest:pitest-maven:mutationCoverage
+
 test-gateway: ## Test the gateway and the modules it depends on
 	$(MAVEN) -pl gateway -am verify
 
@@ -99,9 +116,9 @@ demo-direct: ## Run the scenarios straight against the demo servers, without Adu
 e2e: ## Run the scenarios through the gateway, in 2026-07-28 and in 2025-11-25 mode
 	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
 	KEY=$$($(SEED)) && \
-	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --gateway $(GATEWAY_MCP) $(SCENARIOS) && \
+	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --gateway $(GATEWAY_MCP) $(GATEWAY_SCENARIOS) && \
 	$(COMPOSE) up -d --wait --force-recreate payments && \
-	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --legacy --gateway $(GATEWAY_MCP) $(SCENARIOS)
+	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --legacy --gateway $(GATEWAY_MCP) $(GATEWAY_SCENARIOS)
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks

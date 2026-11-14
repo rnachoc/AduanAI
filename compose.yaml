@@ -34,6 +34,7 @@ services:
       - "127.0.0.1:${GATEWAY_PORT:-8780}:8080"
     environment:
       SPRING_CONFIG_IMPORT: optional:file:/etc/aduana/upstreams.yaml
+      ADUANA_POLICY_DIRECTORY: /etc/aduana/policy
       ADUANA_DATABASE_URL: jdbc:postgresql://postgres:5432/aduana
       ADUANA_DATABASE_USER: ${POSTGRES_USER}
       ADUANA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
@@ -42,6 +43,7 @@ services:
       ADUANA_BOOTSTRAP_ADMIN_PASSWORD: ${ADUANA_ADMIN_PASSWORD:-}
     volumes:
       - ./deploy/upstreams.demo.yaml:/etc/aduana/upstreams.yaml:ro
+      - ./demo/policy:/etc/aduana/policy:ro
 
   crm: &demo-server
     build:

@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+name: support-through-aduana
+description: The support agent's day through Aduana with the demo policy in demo/policy.
+steps:
+  - server: crm
+    tool: search_customers
+    arguments: { query: ana }
+    expect: { text_contains: [C-1001] }
+  - server: crm
+    tool: get_customer
+    arguments: { customer_id: C-9999 }
+    expect: { is_error: true, text_contains: [No customer] }
+  - server: payments
+    tool: get_order
+    arguments: { order_id: O-1001 }
+    expect: { text_contains: ['"totalCents":4999'] }
+  - server: webfetch
+    tool: fetch_url
+    arguments: { url: 'https://shop.example.com/returns' }
+    expect: { text_contains: [within 30 days] }
+  - name: a small refund waits for finance
+    server: payments
+    tool: refund
+    arguments: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101, reason: damaged box }
+    expect: { error_code: APPROVAL_PENDING }
+  - name: nothing was refunded while waiting
+    server: payments
+    tool: list_refunds
+    arguments: { order_id: O-1001 }
+    expect: { text_excludes: [XX7900000000000000000101] }
+  - name: a page off the example domains is refused
+    server: webfetch
+    tool: fetch_url
+    arguments: { url: 'https://evil.test/payload' }
+    expect: { error_code: POLICY_DENIED }
