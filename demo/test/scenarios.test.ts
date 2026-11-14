@@ -22,6 +22,15 @@ describe('the scripted agent', () => {
     await servers.close();
   });
 
+  it('speaks the legacy 2025-11-25 handshake when asked to', async () => {
+    const scenario = await loadScenario(join(SCENARIOS, 'support-happy-path.yaml'));
+    const outcomes = await runScenario(scenario, { kind: 'direct', urls: servers.urls, legacy: true });
+    assert.deepEqual(
+      outcomes.filter((outcome) => !outcome.passed),
+      [],
+    );
+  });
+
   for (const file of ['support-happy-path.yaml', 'injected-refund-direct.yaml']) {
     it(`runs ${file} straight against the servers and every step passes`, async () => {
       const scenario = await loadScenario(join(SCENARIOS, file));
@@ -52,7 +61,14 @@ describe('expectations', () => {
 
   it('the command line selects direct or gateway mode', () => {
     const direct = parseArguments(['--direct', 'crm=http://a/mcp,payments=http://b/mcp', 'x.yaml']);
-    assert.deepEqual(direct.target, { kind: 'direct', urls: { crm: 'http://a/mcp', payments: 'http://b/mcp' } });
+    assert.deepEqual(direct.target, {
+      kind: 'direct',
+      urls: { crm: 'http://a/mcp', payments: 'http://b/mcp' },
+      legacy: false,
+    });
+    const legacy = parseArguments(['--legacy', '--direct', 'crm=http://a/mcp', 'x.yaml']);
+    assert.equal(legacy.target.legacy, true);
+    assert.deepEqual(legacy.files, ['x.yaml']);
     const gateway = parseArguments(['--gateway', 'http://g/mcp', 'y.yaml']);
     assert.equal(gateway.target.kind, 'gateway');
     assert.throws(() => parseArguments(['x.yaml']));
