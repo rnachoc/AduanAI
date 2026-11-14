@@ -7,6 +7,7 @@ import { type Expectation, type Scenario, type Step, loadScenario } from './scen
 export interface DirectTarget {
   readonly kind: 'direct';
   readonly urls: Readonly<Record<string, string>>;
+  readonly legacy?: boolean;
 }
 
 /** Talk to every server through one Aduana endpoint, with tool names `<server>__<tool>`. */
@@ -14,6 +15,7 @@ export interface GatewayTarget {
   readonly kind: 'gateway';
   readonly url: string;
   readonly apiKey: string | undefined;
+  readonly legacy?: boolean;
 }
 
 /** Where a scenario's calls go. */
@@ -93,7 +95,8 @@ async function connect(url: string, target: Target): Promise<Client> {
   if (target.kind === 'gateway' && target.apiKey) {
     headers['authorization'] = `Bearer ${target.apiKey}`;
   }
-  const client = new Client({ name: 'aduana-scripted-agent', version: '0.1.0' });
+  const versionNegotiation = target.legacy ? undefined : { mode: { pin: '2026-07-28' as const } };
+  const client = new Client({ name: 'aduana-scripted-agent', version: '0.1.0' }, { versionNegotiation });
   await client.connect(new StreamableHTTPClientTransport(new URL(url), { requestInit: { headers } }));
   return client;
 }
@@ -159,7 +162,9 @@ export function check(expect: Expectation, result: ToolResult, text: string): st
 }
 
 /**
- * Parses `--direct crm=url,payments=url` or `--gateway url` and the scenario paths.
+ * Parses `--direct crm=url,payments=url` or `--gateway url`, an optional `--legacy`, and the scenario paths.
+ *
+ * The agent speaks 2026-07-28 unless `--legacy` asks for the 2025-11-25 `initialize` handshake.
  *
  * @param argv - command-line arguments after the script name
  * @returns the target and the scenario files
@@ -168,17 +173,18 @@ export function check(expect: Expectation, result: ToolResult, text: string): st
 export function parseArguments(argv: readonly string[]): { target: Target; files: string[] } {
   const files: string[] = [];
   let target: Target | undefined;
+  const legacy = argv.includes('--legacy');
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     const value = argv[index + 1] ?? '';
     if (argument === '--direct') {
       const urls = Object.fromEntries(value.split(',').map((pair) => pair.split('=', 2) as [string, string]));
-      target = { kind: 'direct', urls };
+      target = { kind: 'direct', urls, legacy };
       index += 1;
     } else if (argument === '--gateway') {
-      target = { kind: 'gateway', url: value, apiKey: process.env['ADUANA_API_KEY'] };
+      target = { kind: 'gateway', url: value, apiKey: process.env['ADUANA_API_KEY'], legacy };
       index += 1;
-    } else if (argument !== undefined) {
+    } else if (argument !== undefined && argument !== '--legacy') {
       files.push(argument);
     }
   }
