@@ -24,7 +24,10 @@ PYTHON := $(RUN) $(PYTHON_IMAGE) python
 LINT := $(RUN) $(SAFE_GIT) $(LINT_IMAGE)
 NODE := docker run --rm -v "$(CURDIR)":/src -v aduana-npm:/root/.npm -w /src/demo $(NODE_IMAGE)
 SCENARIOS := scenarios/support-happy-path.yaml scenarios/injected-refund-direct.yaml
-DIRECT_URLS := crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
+GATEWAY_MCP := http://gateway:8080/mcp
+SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src -w /src \
+	$(PYTHON_IMAGE) python scripts/demo_seed.py http://gateway:8080
+DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
 	test-policy test-audit test-gateway test-demo demo-direct e2e hooks secrets
@@ -95,9 +98,10 @@ demo-direct: ## Run the scenarios straight against the demo servers, without Adu
 
 e2e: ## Run the scenarios through the gateway, in 2026-07-28 and in 2025-11-25 mode
 	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
-	$(COMPOSE) run --rm agent --gateway http://gateway:8080/mcp $(SCENARIOS)
-	$(COMPOSE) up -d --wait --force-recreate payments
-	$(COMPOSE) run --rm agent --legacy --gateway http://gateway:8080/mcp $(SCENARIOS)
+	KEY=$$($(SEED)) && \
+	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --gateway $(GATEWAY_MCP) $(SCENARIOS) && \
+	$(COMPOSE) up -d --wait --force-recreate payments && \
+	$(COMPOSE) run --rm -e ADUANA_API_KEY=$$KEY agent --legacy --gateway $(GATEWAY_MCP) $(SCENARIOS)
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks

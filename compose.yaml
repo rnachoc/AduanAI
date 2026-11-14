@@ -24,10 +24,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      crm:
+        condition: service_healthy
+      payments:
+        condition: service_healthy
+      webfetch:
+        condition: service_healthy
     ports:
       - "127.0.0.1:${GATEWAY_PORT:-8780}:8080"
     environment:
       SPRING_CONFIG_IMPORT: optional:file:/etc/aduana/upstreams.yaml
+      ADUANA_DATABASE_URL: jdbc:postgresql://postgres:5432/aduana
+      ADUANA_DATABASE_USER: ${POSTGRES_USER}
+      ADUANA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      ADUANA_MASTER_KEY: ${ADUANA_MASTER_KEY:?set in .env}
+      ADUANA_BOOTSTRAP_ADMIN_EMAIL: ${ADUANA_ADMIN_EMAIL:-}
+      ADUANA_BOOTSTRAP_ADMIN_PASSWORD: ${ADUANA_ADMIN_PASSWORD:-}
     volumes:
       - ./deploy/upstreams.demo.yaml:/etc/aduana/upstreams.yaml:ro
 
