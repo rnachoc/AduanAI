@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+name: refund-after-approval
+description: Once finance approved the exact refund, the agent's identical retry goes through, once.
+steps:
+  - name: the approved refund goes through
+    server: payments
+    tool: refund
+    arguments: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101, reason: damaged box }
+    expect: { text_contains: ['"amountCents":1000'] }
+  - name: the approval was used up
+    server: payments
+    tool: refund
+    arguments: { order_id: O-1001, amount_cents: 1000, destination_iban: XX7900000000000000000101, reason: damaged box }
+    expect: { error_code: APPROVAL_PENDING }
+  - name: one refund, not two
+    server: payments
+    tool: list_refunds
+    arguments: { order_id: O-1001 }
+    expect: { text_contains: [R-0001], text_excludes: [R-0002] }

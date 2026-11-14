@@ -3,7 +3,9 @@
 """Prepares a running stack for the demo through the administration API and prints an agent key.
 
 It signs in as the bootstrap administrator, marks the demo tools (side effects, untrusted source,
-cost), creates the `support-agent` principal if it does not exist and issues it a fresh key. Only
+cost), creates the demo approvers (finance, support leads, security) and a viewer with the
+administrator's local-only password, creates the `support-agent` principal if it does not exist and
+issues it a fresh key. Only
 the key goes to standard output, so `KEY=$(python scripts/demo_seed.py ...)` works.
 
 Author: Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
@@ -18,6 +20,13 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+APPROVERS: list[dict[str, object]] = [
+    {"email": "finance@example.com", "role": "approver", "groups": ["finance"]},
+    {"email": "lead@example.com", "role": "approver", "groups": ["support-leads"]},
+    {"email": "security@example.com", "role": "approver", "groups": ["security"]},
+    {"email": "viewer@example.com", "role": "viewer", "groups": ["viewer"]},
+]
 
 TOOL_METADATA: dict[str, dict[str, object]] = {
     "crm/update_customer_email": {"sideEffect": True, "sensitivity": "high"},
@@ -85,6 +94,12 @@ def main(arguments: list[str]) -> int:
         change = TOOL_METADATA.get(f"{tool['server']}/{tool['name']}")
         if change:
             api.call("PATCH", f"/api/v1/tools/{tool['id']}", change)
+    for user in APPROVERS:
+        try:
+            api.call("POST", "/api/v1/users", {**user, "password": password})
+        except urllib.error.HTTPError as error:
+            if error.code != 400:
+                raise
     principals = api.call("GET", "/api/v1/principals")
     agent = next((p for p in principals if p["name"] == "support-agent"), None)  # type: ignore[union-attr]
     if agent is None:
