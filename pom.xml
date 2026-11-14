@@ -52,6 +52,7 @@
     <spotless.version>3.11.0</spotless.version>
     <google-java-format.version>2.0.0</google-java-format.version>
     <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
+    <checkstyle.version>14.4.0</checkstyle.version>
     <jacoco.version>0.8.16</jacoco.version>
     <pitest.version>1.30.2</pitest.version>
     <pitest-junit5.version>1.2.3</pitest-junit5.version>
@@ -160,6 +161,13 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>${checkstyle-plugin.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.version}</version>
+          </dependency>
+        </dependencies>
         <configuration>
           <configLocation>${maven.multiModuleProjectDirectory}/build-config/checkstyle.xml</configLocation>
           <consoleOutput>true</consoleOutput>
