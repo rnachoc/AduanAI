@@ -267,11 +267,11 @@ class PolicyPipelineTest {
     assertThat(typeError.status()).isEqualTo(400);
     assertThat(typeError.body().path("errors").toString())
         .contains("cannot apply to a string field");
+    assertThat(events.recentTypes(Tenants.DEFAULT, 3)).containsOnly("POLICY_REJECTED");
     assertThat(admin.send("GET", "/api/v1/policy", null).body().path("sha256").asString())
         .isEqualTo(activeBefore);
     assertThat(call(stranger, "read", null).path("structuredContent").path("code").asString())
         .isEqualTo("POLICY_DENIED");
-    assertThat(events.recentTypes(Tenants.DEFAULT, 3)).containsOnly("POLICY_REJECTED");
   }
 
   @Test
@@ -281,8 +281,8 @@ class PolicyPipelineTest {
     ApiTestClient.Reply loaded =
         admin.send("POST", "/api/v1/policy", upload(everythingAllowed, Map.of()));
     assertThat(loaded.status()).isEqualTo(201);
-    assertThat(call(stranger, "other", null).path("isError").asBoolean()).isFalse();
     assertThat(events.recentTypes(Tenants.DEFAULT, 1)).containsExactly("POLICY_LOADED");
+    assertThat(call(stranger, "other", null).path("isError").asBoolean()).isFalse();
     ApiTestClient.Reply restored =
         admin.send(
             "POST",

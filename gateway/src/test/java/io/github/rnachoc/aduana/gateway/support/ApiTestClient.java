@@ -79,6 +79,29 @@ public final class ApiTestClient {
   }
 
   /**
+   * Sends a request and returns the body as text, for answers that are not one JSON document.
+   *
+   * @param method the HTTP method
+   * @param path the path under the base URL
+   * @return the body
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public String sendRaw(String method, String path) {
+    HttpRequest request =
+        HttpRequest.newBuilder(base.resolve(path))
+            .method(method, HttpRequest.BodyPublishers.noBody())
+            .build();
+    try {
+      return http.send(request, HttpResponse.BodyHandlers.ofString()).body();
+    } catch (IOException exception) {
+      throw new IllegalStateException("API request failed", exception);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("interrupted", exception);
+    }
+  }
+
+  /**
    * Sends a request with an optional JSON body.
    *
    * @param method the HTTP method
