@@ -11,6 +11,10 @@ import io.github.rnachoc.aduana.gateway.config.AduanaProperties;
 import io.github.rnachoc.aduana.gateway.error.AgentErrorCode;
 import io.github.rnachoc.aduana.gateway.error.AgentErrors;
 import io.github.rnachoc.aduana.gateway.identity.Principal;
+import io.github.rnachoc.aduana.gateway.inspection.Detectors;
+import io.github.rnachoc.aduana.gateway.inspection.Redactor;
+import io.github.rnachoc.aduana.gateway.inspection.ResultInspector;
+import io.github.rnachoc.aduana.gateway.inspection.TaintService;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
 import io.github.rnachoc.aduana.gateway.policy.PolicyService;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamClient;
@@ -18,9 +22,14 @@ import io.github.rnachoc.aduana.gateway.upstream.UpstreamResponse;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamServer;
 import io.github.rnachoc.aduana.policy.CallContext;
 import io.github.rnachoc.aduana.policy.Decision;
+import io.github.rnachoc.aduana.policy.Rule;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -34,7 +43,9 @@ import tools.jackson.databind.node.ObjectNode;
  * the pinned schema and size limit, ask the policy, forward with the injected credential, map
  * errors.
  *
- * <p>Obligations such as redaction (Phase 7) are not applied yet.
+ * <p>Arguments are always written to the log redacted; the policy's obligations deny or flag
+ * sensitive arguments and redact results; values from untrusted results are tracked into later
+ * arguments (plan §5.6, §5.7).
  *
  * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
  */
@@ -49,6 +60,8 @@ public class ToolCallService {
   private final PolicyService policies;
   private final AuditLog audit;
   private final ApprovalService approvals;
+  private final TaintService taints;
+  private final ResultInspector inspector;
   private final UpstreamClient upstreams;
   private final AgentErrors errors;
   private final JsonMapper json;
@@ -62,6 +75,8 @@ public class ToolCallService {
    * @param policies decides calls with the active policy
    * @param audit records every decision before anything is forwarded
    * @param approvals holds calls that need a person's approval
+   * @param taints tracks values from untrusted results
+   * @param inspector redacts and marks results
    * @param upstreams the upstream client
    * @param errors builds agent-facing errors
    * @param json the shared JSON mapper
@@ -74,6 +89,8 @@ public class ToolCallService {
       PolicyService policies,
       AuditLog audit,
       ApprovalService approvals,
+      TaintService taints,
+      ResultInspector inspector,
       UpstreamClient upstreams,
       AgentErrors errors,
       JsonMapper json) {
@@ -83,6 +100,8 @@ public class ToolCallService {
     this.policies = policies;
     this.audit = audit;
     this.approvals = approvals;
+    this.taints = taints;
+    this.inspector = inspector;
     this.upstreams = upstreams;
     this.errors = errors;
     this.json = json;
@@ -122,22 +141,29 @@ public class ToolCallService {
       return errors.toolResult(AgentErrorCode.ARGS_INVALID);
     }
     ObjectNode forwardedArguments = valid.get();
+    String traceKey = traceKey(params);
+    Redactor.Redacted logged =
+        Redactor.redact(forwardedArguments, Detectors.IDS, Redactor.Style.WITH_HINT);
+    TaintService.Marks taint =
+        taints.check(principal.tenantId(), principal.id(), traceKey, forwardedArguments);
     PolicyService.Decided decided =
         policies.decide(
-            principal, offered.tool(), forwardedArguments, CallContext.ContextFacts.CLEAN);
-    Decision decision = decided.decision();
+            principal,
+            offered.tool(),
+            forwardedArguments,
+            new CallContext.ContextFacts(taint.flowFromUntrusted(), taint.contextTainted()));
+    Decision decision = applyArgumentObligations(decided.decision(), logged.found());
     AuditRecord.Builder intent =
         AuditRecord.of("CALL_DECIDED")
             .principal(principal.id())
             .tool(name.server(), name.qualified())
-            .arguments(AuditLog.hashOf(forwardedArguments), forwardedArguments)
+            .arguments(AuditLog.hashOf(forwardedArguments), logged.value())
             .decision(
                 decision.effect().yamlName(),
                 decision.matchedRules(),
                 decision.reason().orElse(null),
                 decided.bundleSha256())
-            .flags(
-                decision.typeMismatches().isEmpty() ? List.of() : List.of("POLICY_TYPE_MISMATCH"));
+            .flags(callFlags(decision, logged.found(), taint));
     if (decision instanceof Decision.RequireApproval approval) {
       Optional<JsonNode> refused =
           awaitApproval(principal, offered, name, decided, approval, intent);
@@ -159,7 +185,10 @@ public class ToolCallService {
     long started = System.nanoTime();
     UpstreamResponse response = upstreams.send(server, "tools/call", forward, offered.credential());
     long latency = (System.nanoTime() - started) / 1_000_000;
-    return complete(principal, name, decided.bundleSha256(), server, response, latency);
+    Completion completion =
+        new Completion(
+            principal, offered, name, decided.bundleSha256(), decision.obligations(), traceKey);
+    return complete(completion, server, response, latency);
   }
 
   /**
@@ -260,11 +289,29 @@ public class ToolCallService {
   }
 
   /**
-   * Records how the forwarded call ended and maps the upstream's answer for the agent.
+   * What the end of a forwarded call needs to know.
    *
    * @param principal the caller
-   * @param name the tool
+   * @param offered the tool
+   * @param name the tool name
    * @param bundle the bundle that allowed the call
+   * @param obligations what the policy requires of the result
+   * @param traceKey the call's trace id, or empty
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private record Completion(
+      Principal principal,
+      CatalogService.OfferedTool offered,
+      ToolName name,
+      String bundle,
+      Rule.Obligations obligations,
+      String traceKey) {}
+
+  /**
+   * Inspects the result (redaction, injection marks), records how the call ended, remembers the
+   * values of an untrusted result, and maps the upstream's answer for the agent.
+   *
+   * @param completion the call
    * @param server the upstream
    * @param response the upstream's answer
    * @param latency milliseconds the upstream took
@@ -272,12 +319,10 @@ public class ToolCallService {
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   private JsonNode complete(
-      Principal principal,
-      ToolName name,
-      String bundle,
-      UpstreamServer server,
-      UpstreamResponse response,
-      long latency) {
+      Completion completion, UpstreamServer server, UpstreamResponse response, long latency) {
+    Principal principal = completion.principal();
+    ToolName name = completion.name();
+    String bundle = completion.bundle();
     AuditRecord.Builder outcome =
         AuditRecord.of("CALL_COMPLETED")
             .principal(principal.id())
@@ -285,10 +330,14 @@ public class ToolCallService {
             .bundle(bundle);
     JsonNode result;
     boolean unknownTool = false;
+    JsonNode untrusted = null;
     switch (response) {
       case UpstreamResponse.Result(JsonNode value) -> {
-        outcome.result(AuditLog.hashOf(value), latency);
-        result = value;
+        ResultInspector.Inspected inspected =
+            inspector.inspect(value, List.copyOf(completion.obligations().redactResult()));
+        outcome.result(AuditLog.hashOf(value), latency).flags(inspected.flags());
+        result = inspected.result();
+        untrusted = completion.offered().tool().untrustedSource() ? value : null;
       }
       case UpstreamResponse.RpcError(int code, String message)
           when code == McpProtocol.INVALID_PARAMS && message.startsWith("Unknown tool") -> {
@@ -312,11 +361,102 @@ public class ToolCallService {
         result = errors.toolResult(AgentErrorCode.UPSTREAM_TIMEOUT);
       }
     }
-    record(principal, outcome);
+    Optional<Long> seq = recordSeq(principal, outcome);
+    if (untrusted != null && seq.isPresent()) {
+      taints.record(
+          principal.tenantId(), principal.id(), completion.traceKey(), untrusted, seq.get());
+    }
     if (unknownTool) {
       throw errors.toolNotFound();
     }
     return result;
+  }
+
+  /**
+   * Turns an allow or an approval into a deny when the arguments contain a value of a detector the
+   * matching rules list under `deny_args_containing`.
+   *
+   * @param decision the policy's decision
+   * @param found detectors that fired on the arguments
+   * @return the decision to apply
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private static Decision applyArgumentObligations(Decision decision, Set<String> found) {
+    Set<String> forbidden = new TreeSet<>(decision.obligations().denyArgsContaining());
+    forbidden.retainAll(found);
+    if (forbidden.isEmpty()) {
+      return decision;
+    }
+    return new Decision.Deny(
+        "ARGS_CONTAIN_" + forbidden.iterator().next().toUpperCase(Locale.ROOT),
+        decision.matchedRules(),
+        decision.typeMismatches());
+  }
+
+  /**
+   * Builds the flags of a `CALL_DECIDED` entry.
+   *
+   * @param decision the decision
+   * @param found detectors that fired on the arguments
+   * @param taint the taint marks
+   * @return the flags, including where each tainted argument came from
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private static List<String> callFlags(
+      Decision decision, Set<String> found, TaintService.Marks taint) {
+    List<String> flags = new ArrayList<>();
+    if (!decision.typeMismatches().isEmpty()) {
+      flags.add("POLICY_TYPE_MISMATCH");
+    }
+    Set<String> flagged = new TreeSet<>(decision.obligations().flagArgsContaining());
+    flagged.retainAll(found);
+    flagged.forEach(id -> flags.add("SENSITIVE_" + id.toUpperCase(Locale.ROOT)));
+    if (!found.isEmpty()) {
+      flags.add("REDACTED");
+    }
+    if (taint.contextTainted()) {
+      flags.add("CONTEXT_TAINTED");
+    }
+    if (taint.flowFromUntrusted()) {
+      flags.add("FLOW_FROM_UNTRUSTED");
+      taint
+          .sources()
+          .forEach(
+              source -> flags.add("TAINT_SOURCE:" + source.path() + ":seq=" + source.sourceSeq()));
+    }
+    return flags;
+  }
+
+  /**
+   * Reads the trace id from `_meta.traceparent` (W3C Trace Context: version-traceid-parent-flags).
+   *
+   * @param params the call parameters
+   * @return the 32-character trace id, or empty
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  static String traceKey(ObjectNode params) {
+    String traceparent = params.path("_meta").path("traceparent").asString("");
+    String[] parts = traceparent.split("-");
+    return parts.length == 4 && parts[1].matches("[0-9a-f]{32}") ? parts[1] : "";
+  }
+
+  /**
+   * Appends an entry and returns its seq, or empty when the log is unavailable.
+   *
+   * @param principal the caller
+   * @param record the entry
+   * @return the seq
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Optional<Long> recordSeq(Principal principal, AuditRecord.Builder record) {
+    try {
+      return Optional.of(audit.append(principal.tenantId(), record.build()).seq());
+    } catch (DataAccessException exception) {
+      LOG.error(
+          "audit log unavailable after the call: {}",
+          exception.getMostSpecificCause().getMessage());
+      return Optional.empty();
+    }
   }
 
   /**

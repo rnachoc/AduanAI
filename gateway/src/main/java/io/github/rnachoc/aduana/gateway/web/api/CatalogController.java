@@ -91,6 +91,7 @@ public class CatalogController {
    * @param cost budget units per call
    * @param enabled whether it may be offered
    * @param state its review state
+   * @param descriptionFlags injection patterns found in its description
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public record ToolView(
@@ -105,7 +106,8 @@ public class CatalogController {
       String sensitivity,
       int cost,
       boolean enabled,
-      String state) {}
+      String state,
+      List<String> descriptionFlags) {}
 
   /**
    * A change to a tool; absent fields stay as they are.
@@ -294,6 +296,7 @@ public class CatalogController {
         tool.sensitivity(),
         tool.cost(),
         tool.enabled(),
-        tool.state());
+        tool.state(),
+        tool.descriptionFlags());
   }
 }

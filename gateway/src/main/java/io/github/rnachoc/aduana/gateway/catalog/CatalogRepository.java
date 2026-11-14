@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
@@ -309,6 +310,28 @@ public class CatalogRepository {
   }
 
   /**
+   * Stores the injection patterns found in a tool's published description.
+   *
+   * @param tenantId the tenant
+   * @param serverId the server
+   * @param name the tool name
+   * @param flags the pattern ids
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public void setDescriptionFlags(UUID tenantId, UUID serverId, String name, List<String> flags) {
+    jdbc.sql(
+            """
+            update tool set description_flags = :flags
+            where tenant_id = :tenant and server_id = :server and name = :name
+            """)
+        .param("flags", flags.toArray(String[]::new))
+        .param("tenant", tenantId)
+        .param("server", serverId)
+        .param("name", name)
+        .update();
+  }
+
+  /**
    * Sets a tool's state without touching its definition.
    *
    * @param tenantId the tenant
@@ -400,6 +423,7 @@ public class CatalogRepository {
         rs.getString("sensitivity"),
         rs.getInt("cost"),
         rs.getBoolean("enabled"),
-        rs.getString("state"));
+        rs.getString("state"),
+        Arrays.asList((String[]) rs.getArray("description_flags").getArray()));
   }
 }

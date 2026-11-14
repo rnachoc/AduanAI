@@ -3,6 +3,7 @@
 package io.github.rnachoc.aduana.gateway.catalog;
 
 import io.github.rnachoc.aduana.gateway.events.EventLog;
+import io.github.rnachoc.aduana.gateway.inspection.InjectionScanner;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamClient;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamServer;
 import java.net.URI;
@@ -49,6 +50,7 @@ public class CatalogService {
   private final DefinitionHasher hasher;
   private final UpstreamClient upstreams;
   private final EventLog events;
+  private final InjectionScanner scanner;
   private final Clock clock;
 
   /**
@@ -109,6 +111,7 @@ public class CatalogService {
    * @param hasher pins definitions
    * @param upstreams reads tool lists from servers
    * @param events the event log
+   * @param scanner marks descriptions that address agents
    * @param clock the clock
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
@@ -118,12 +121,14 @@ public class CatalogService {
       DefinitionHasher hasher,
       UpstreamClient upstreams,
       EventLog events,
+      InjectionScanner scanner,
       Clock clock) {
     this.repository = repository;
     this.cipher = cipher;
     this.hasher = hasher;
     this.upstreams = upstreams;
     this.events = events;
+    this.scanner = scanner;
     this.clock = clock;
   }
 
@@ -225,6 +230,9 @@ public class CatalogService {
         continue;
       }
       reconcile(server, firstSync, tool, Optional.ofNullable(pinned.get(name)), report);
+      // Descriptions are third-party text: mark the ones that address agents (plan §5.3).
+      repository.setDescriptionFlags(
+          tenantId, serverId, name, scanner.scan(hasher.definition(tool)));
     }
     for (CatalogTool tool : pinned.values()) {
       if (!seen.contains(tool.name()) && !REMOVED.equals(tool.state())) {
@@ -270,7 +278,8 @@ public class CatalogService {
               "low",
               0,
               true,
-              firstSync ? ACTIVE : NEW),
+              firstSync ? ACTIVE : NEW,
+              List.of()),
           clock.instant());
       report.added().add(name);
       return;
@@ -332,7 +341,8 @@ public class CatalogService {
             sensitivity,
             cost,
             change.enabled().orElse(tool.enabled()),
-            tool.state());
+            tool.state(),
+            tool.descriptionFlags());
     repository.updateMetadata(updated, clock.instant());
     if (change.acceptDefinition() && (CHANGED.equals(tool.state()) || NEW.equals(tool.state()))) {
       repository.acceptPending(tenantId, toolId, clock.instant());
