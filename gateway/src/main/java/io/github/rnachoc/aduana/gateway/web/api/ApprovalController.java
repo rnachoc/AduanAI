@@ -10,6 +10,7 @@ import io.github.rnachoc.aduana.gateway.identity.PrincipalService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -81,13 +82,22 @@ public class ApprovalController {
    *
    * @param user the signed-in approver
    * @param state only this state
-   * @return the approvals, newest first
+   * @return the approvals the user's groups may decide, newest first
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   @GetMapping
   public List<ApprovalView> list(
       @AuthenticationPrincipal ConsoleUser user, @RequestParam Optional<String> state) {
-    return approvals.list(user.tenantId(), state).stream().map(this::view).toList();
+    Set<String> groups =
+        principals.list(user.tenantId()).stream()
+            .filter(principal -> principal.id().equals(user.principalId()))
+            .findFirst()
+            .map(principal -> Set.copyOf(principal.groups()))
+            .orElse(Set.of());
+    return approvals.list(user.tenantId(), state).stream()
+        .filter(approval -> groups.contains(approval.approversGroup()))
+        .map(this::view)
+        .toList();
   }
 
   /**
