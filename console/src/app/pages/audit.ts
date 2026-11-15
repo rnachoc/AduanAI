@@ -15,7 +15,14 @@ import { prettyJson } from '../diff';
   selector: 'app-audit',
   imports: [FormsModule],
   template: `
-    <h1>Log</h1>
+    <header class="page-head">
+      <p class="eyebrow">Hash-chained · signed</p>
+      <h1>Log</h1>
+      <p class="lede">
+        Every decision and change, linked by hash and checkpointed with a signature anyone can
+        check.
+      </p>
+    </header>
     @if (verification(); as check) {
       <p class="banner" [class.bad]="!check.intact" role="status">
         Chain {{ check.intact ? 'intact' : 'BROKEN' }}: {{ check.entries }} entries, last seq
@@ -44,40 +51,42 @@ import { prettyJson } from '../diff';
       <input id="principal" name="principal" [(ngModel)]="principal" />
       <button type="submit">Search</button>
     </form>
-    <div class="split">
-      <table>
-        <caption class="visually-hidden">
-          Matching entries, newest first
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Seq</th>
-            <th scope="col">Type</th>
-            <th scope="col">Tool</th>
-            <th scope="col">Decision</th>
-            <th scope="col">Flags</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (entry of entries(); track entry.seq) {
+    <div [class.split]="selected() !== null">
+      <div class="panel">
+        <table>
+          <caption class="visually-hidden">
+            Matching entries, newest first
+          </caption>
+          <thead>
             <tr>
-              <td>
-                <button type="button" class="link" (click)="selected.set(entry)">
-                  {{ entry.seq }}
-                </button>
-              </td>
-              <td>{{ entry.type }}</td>
-              <td>{{ entry.tool ?? '' }}</td>
-              <td>{{ entry.decision ?? '' }}</td>
-              <td>{{ entry.flags.length }}</td>
+              <th scope="col">Seq</th>
+              <th scope="col">Type</th>
+              <th scope="col">Tool</th>
+              <th scope="col">Decision</th>
+              <th scope="col">Flags</th>
             </tr>
-          } @empty {
-            <tr>
-              <td colspan="5">No entries match.</td>
-            </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (entry of entries(); track entry.seq) {
+              <tr>
+                <td>
+                  <button type="button" class="link" (click)="selected.set(entry)">
+                    {{ entry.seq }}
+                  </button>
+                </td>
+                <td>{{ entry.type }}</td>
+                <td>{{ entry.tool ?? '' }}</td>
+                <td>{{ entry.decision ?? '' }}</td>
+                <td>{{ entry.flags.length }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5">No entries match.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
       @if (selected(); as entry) {
         <section class="detail" aria-labelledby="entry-title">
           <h2 id="entry-title">Entry {{ entry.seq }}</h2>

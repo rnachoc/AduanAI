@@ -14,9 +14,23 @@ import { Auth } from '../auth';
   selector: 'app-login',
   imports: [FormsModule],
   template: `
-    <section class="narrow">
-      <h1>Sign in</h1>
-      <form (ngSubmit)="submit()">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Control gateway for AI agents</p>
+        <h1>Every tool call, checked.</h1>
+        <p class="lede">
+          Policy written in code decides. A person approves when it matters. A log anyone can verify
+          keeps the proof.
+        </p>
+        <ul class="hero-points">
+          <li>Policy as code</li>
+          <li>Bound approvals</li>
+          <li>Verifiable log</li>
+          <li>Untrusted data tracked</li>
+        </ul>
+      </div>
+      <form class="card" (ngSubmit)="submit()">
+        <h2>Sign in</h2>
         <label for="email">E-mail</label>
         <input
           id="email"

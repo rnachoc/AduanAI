@@ -12,73 +12,84 @@ import { type DiffLine, diffLines, prettyJson } from '../diff';
 @Component({
   selector: 'app-catalog',
   template: `
-    <h1>Catalog</h1>
+    <header class="page-head">
+      <p class="eyebrow">Servers and tools</p>
+      <h1>Catalog</h1>
+      <p class="lede">
+        What agents can reach, pinned by the hash of each definition. A changed definition waits for
+        review.
+      </p>
+    </header>
     <h2>Servers</h2>
-    <table>
-      <caption class="visually-hidden">
-        Upstream servers
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Name</th>
-          <th scope="col">Transport</th>
-          <th scope="col">Endpoint</th>
-          <th scope="col">Status</th>
-          <th scope="col">Credential</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (server of servers(); track server.id) {
+    <div class="panel">
+      <table>
+        <caption class="visually-hidden">
+          Upstream servers
+        </caption>
+        <thead>
           <tr>
-            <td>{{ server.name }}</td>
-            <td>{{ server.transport }}</td>
-            <td>
-              <code>{{ server.endpoint }}</code>
-            </td>
-            <td>{{ server.status }}</td>
-            <td>{{ server.hasCredential ? 'yes' : 'no' }}</td>
+            <th scope="col">Name</th>
+            <th scope="col">Transport</th>
+            <th scope="col">Endpoint</th>
+            <th scope="col">Status</th>
+            <th scope="col">Credential</th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (server of servers(); track server.id) {
+            <tr>
+              <td>{{ server.name }}</td>
+              <td>{{ server.transport }}</td>
+              <td>
+                <code>{{ server.endpoint }}</code>
+              </td>
+              <td>{{ server.status }}</td>
+              <td>{{ server.hasCredential ? 'yes' : 'no' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
     <h2>Tools</h2>
-    <table>
-      <caption class="visually-hidden">
-        Tools offered to agents
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Tool</th>
-          <th scope="col">State</th>
-          <th scope="col">Side effect</th>
-          <th scope="col">Untrusted source</th>
-          <th scope="col">Sensitivity</th>
-          <th scope="col">Cost</th>
-          <th scope="col">Marks</th>
-          <th scope="col">Review</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (tool of tools(); track tool.id) {
+    <div class="panel">
+      <table>
+        <caption class="visually-hidden">
+          Tools offered to agents
+        </caption>
+        <thead>
           <tr>
-            <td>{{ tool.server }}__{{ tool.name }}</td>
-            <td>
-              <span class="tag" [class.warn]="tool.state !== 'active'">{{ tool.state }}</span>
-            </td>
-            <td>{{ tool.sideEffect ? 'yes' : 'no' }}</td>
-            <td>{{ tool.untrustedSource ? 'yes' : 'no' }}</td>
-            <td>{{ tool.sensitivity }}</td>
-            <td>{{ tool.cost }}</td>
-            <td>{{ tool.descriptionFlags.join(', ') }}</td>
-            <td>
-              @if (tool.pendingDefinition) {
-                <button type="button" (click)="review.set(tool)">Review change</button>
-              }
-            </td>
+            <th scope="col">Tool</th>
+            <th scope="col">State</th>
+            <th scope="col">Side effect</th>
+            <th scope="col">Untrusted source</th>
+            <th scope="col">Sensitivity</th>
+            <th scope="col">Cost</th>
+            <th scope="col">Marks</th>
+            <th scope="col">Review</th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (tool of tools(); track tool.id) {
+            <tr>
+              <td>{{ tool.server }}__{{ tool.name }}</td>
+              <td>
+                <span class="tag" [class.warn]="tool.state !== 'active'">{{ tool.state }}</span>
+              </td>
+              <td>{{ tool.sideEffect ? 'yes' : 'no' }}</td>
+              <td>{{ tool.untrustedSource ? 'yes' : 'no' }}</td>
+              <td>{{ tool.sensitivity }}</td>
+              <td>{{ tool.cost }}</td>
+              <td>{{ tool.descriptionFlags.join(', ') }}</td>
+              <td>
+                @if (tool.pendingDefinition) {
+                  <button type="button" (click)="review.set(tool)">Review change</button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
     @if (review(); as tool) {
       <section class="detail" aria-labelledby="review-title">
         <h2 id="review-title">Definition change: {{ tool.server }}__{{ tool.name }}</h2>

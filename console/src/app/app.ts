@@ -32,6 +32,8 @@ import { Auth } from './auth';
         </nav>
         <span class="who">{{ user.email }} · {{ user.role }}</span>
         <button type="button" class="quiet" (click)="logout()">Sign out</button>
+      } @else {
+        <span class="spacer"></span>
       }
       <button type="button" class="quiet" [attr.aria-pressed]="dark()" (click)="toggleTheme()">
         {{ dark() ? 'Light' : 'Dark' }} theme

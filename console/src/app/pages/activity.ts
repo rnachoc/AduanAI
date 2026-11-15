@@ -23,43 +23,61 @@ const KEEP = 100;
 @Component({
   selector: 'app-activity',
   template: `
-    <h1>Activity</h1>
-    <p class="muted" aria-live="polite">
-      {{ live() ? 'Live' : 'Connecting…' }} · {{ items().length }} entries
-    </p>
-    <table>
-      <caption class="visually-hidden">
-        Latest log entries, newest first
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Seq</th>
-          <th scope="col">Time</th>
-          <th scope="col">Type</th>
-          <th scope="col">Tool</th>
-          <th scope="col">Decision</th>
-          <th scope="col">Reason</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (item of items(); track item.seq) {
+    <header class="page-head">
+      <p class="eyebrow" aria-live="polite">
+        {{ live() ? 'Live' : 'Connecting…' }} · {{ items().length }} entries
+      </p>
+      <h1>Activity</h1>
+      <p class="lede">Every decision the gateway makes, as it makes it.</p>
+    </header>
+    <div class="stats">
+      <p class="stat">
+        <span class="value">{{ count('allow') }}</span><span class="label">allowed</span>
+      </p>
+      <p class="stat">
+        <span class="value">{{ count('require_approval') }}</span><span class="label"
+          >held for a person</span
+        >
+      </p>
+      <p class="stat">
+        <span class="value">{{ count('deny') }}</span><span class="label">denied</span>
+      </p>
+    </div>
+    <div class="panel">
+      <table>
+        <caption class="visually-hidden">
+          Latest log entries, newest first
+        </caption>
+        <thead>
           <tr>
-            <td>{{ item.seq }}</td>
-            <td>{{ item.ts }}</td>
-            <td>
-              <span class="tag">{{ item.type }}</span>
-            </td>
-            <td>{{ item.tool ?? '' }}</td>
-            <td>{{ item.decision ?? '' }}</td>
-            <td>{{ item.reasonCode ?? '' }}</td>
+            <th scope="col">Seq</th>
+            <th scope="col">Time</th>
+            <th scope="col">Type</th>
+            <th scope="col">Tool</th>
+            <th scope="col">Decision</th>
+            <th scope="col">Reason</th>
           </tr>
-        } @empty {
-          <tr>
-            <td colspan="6">Nothing yet.</td>
-          </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (item of items(); track item.seq) {
+            <tr>
+              <td>{{ item.seq }}</td>
+              <td>{{ item.ts }}</td>
+              <td>
+                <span class="tag">{{ item.type }}</span>
+              </td>
+              <td>{{ item.tool ?? '' }}</td>
+              <td>{{ item.decision ?? '' }}</td>
+              <td>{{ item.reasonCode ?? '' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="6">Nothing yet.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   `,
 })
 export class ActivityPage implements OnInit, OnDestroy {
@@ -108,6 +126,18 @@ export class ActivityPage implements OnInit, OnDestroy {
     this.items.update((items) =>
       [item, ...items.filter((old) => old.seq !== item.seq)].slice(0, KEEP),
     );
+  }
+
+  /**
+   * Counts the shown call decisions with an effect.
+   *
+   * @param decision - the effect
+   * @returns how many of the shown entries have it
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  protected count(decision: string): number {
+    return this.items().filter((item) => item.type === 'CALL_DECIDED' && item.decision === decision)
+      .length;
   }
 
   /**

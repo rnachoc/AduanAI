@@ -11,7 +11,14 @@ import { type ActivePolicy, Api } from '../api';
 @Component({
   selector: 'app-policy',
   template: `
-    <h1>Policy</h1>
+    <header class="page-head">
+      <p class="eyebrow">Active bundle</p>
+      <h1>Policy</h1>
+      <p class="lede">
+        The rules in force and the result of their tests. Load a new bundle through the API or the
+        CLI.
+      </p>
+    </header>
     @if (policy(); as active) {
       <p class="banner" [class.bad]="failed().length > 0" role="status">
         Bundle {{ active.sha256.slice(0, 12) }}… loaded {{ active.loadedAt }}:

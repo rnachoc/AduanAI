@@ -11,35 +11,43 @@ import { Api, type ApiKey, type Principal } from '../api';
 @Component({
   selector: 'app-identities',
   template: `
-    <h1>Identities</h1>
-    <div class="split">
-      <table>
-        <caption class="visually-hidden">
-          Principals
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Kind</th>
-            <th scope="col">Attributes</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (principal of principals(); track principal.id) {
+    <header class="page-head">
+      <p class="eyebrow">Agents and keys</p>
+      <h1>Identities</h1>
+      <p class="lede">
+        Every principal, the attributes the policy reads, and the API keys it holds.
+      </p>
+    </header>
+    <div [class.split]="selected() !== null">
+      <div class="panel">
+        <table>
+          <caption class="visually-hidden">
+            Principals
+          </caption>
+          <thead>
             <tr>
-              <td>
-                <button type="button" class="link" (click)="open(principal)">
-                  {{ principal.name }}
-                </button>
-              </td>
-              <td>{{ principal.kind }}</td>
-              <td>{{ attributes(principal) }}</td>
-              <td>{{ principal.status }}</td>
+              <th scope="col">Name</th>
+              <th scope="col">Kind</th>
+              <th scope="col">Attributes</th>
+              <th scope="col">Status</th>
             </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (principal of principals(); track principal.id) {
+              <tr>
+                <td>
+                  <button type="button" class="link" (click)="open(principal)">
+                    {{ principal.name }}
+                  </button>
+                </td>
+                <td>{{ principal.kind }}</td>
+                <td>{{ attributes(principal) }}</td>
+                <td>{{ principal.status }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
       @if (selected(); as principal) {
         <section class="detail" aria-labelledby="keys-title">
           <h2 id="keys-title">Keys of {{ principal.name }}</h2>
@@ -58,7 +66,7 @@ import { Api, type ApiKey, type Principal } from '../api';
                 }
               </li>
             } @empty {
-              <li class="muted">No keys.</li>
+              <li class="muted empty">No keys.</li>
             }
           </ul>
         </section>

@@ -14,8 +14,14 @@ import { Api, type Simulation } from '../api';
   selector: 'app-simulation',
   imports: [FormsModule],
   template: `
-    <h1>Simulation</h1>
-    <form (ngSubmit)="run()">
+    <header class="page-head">
+      <p class="eyebrow">Before you load it</p>
+      <h1>Simulation</h1>
+      <p class="lede">
+        Replay recorded decisions against a candidate policy and see what would change.
+      </p>
+    </header>
+    <form class="card" (ngSubmit)="run()">
       <label for="candidate">Candidate policy.yaml</label>
       <textarea
         id="candidate"
@@ -44,35 +50,37 @@ import { Api, type Simulation } from '../api';
         {{ sim.changed }} would change, {{ sim.unchanged }} unchanged, {{ sim.unknown }} unknown
       </p>
       <h2>Changes</h2>
-      <table>
-        <caption class="visually-hidden">
-          Decisions that would change, grouped by the candidate's rules
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Rules</th>
-            <th scope="col">Before</th>
-            <th scope="col">After</th>
-            <th scope="col">Count</th>
-            <th scope="col">Examples</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (change of sim.changes; track change.rules + change.before + change.after) {
+      <div class="panel">
+        <table>
+          <caption class="visually-hidden">
+            Decisions that would change, grouped by the candidate's rules
+          </caption>
+          <thead>
             <tr>
-              <td>{{ change.rules }}</td>
-              <td>{{ change.before }}</td>
-              <td>{{ change.after }}</td>
-              <td>{{ change.count }}</td>
-              <td>{{ examples(change.examples) }}</td>
+              <th scope="col">Rules</th>
+              <th scope="col">Before</th>
+              <th scope="col">After</th>
+              <th scope="col">Count</th>
+              <th scope="col">Examples</th>
             </tr>
-          } @empty {
-            <tr>
-              <td colspan="5">No decision would change.</td>
-            </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (change of sim.changes; track change.rules + change.before + change.after) {
+              <tr>
+                <td>{{ change.rules }}</td>
+                <td>{{ change.before }}</td>
+                <td>{{ change.after }}</td>
+                <td>{{ change.count }}</td>
+                <td>{{ examples(change.examples) }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5">No decision would change.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
       <h2>Unknown ({{ sim.unknown }})</h2>
       <p class="muted">
         The log keeps arguments redacted, so a condition that reads a redacted value cannot be

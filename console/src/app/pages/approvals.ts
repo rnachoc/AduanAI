@@ -14,7 +14,13 @@ import { prettyJson } from '../diff';
 @Component({
   selector: 'app-approvals',
   template: `
-    <h1>Approvals</h1>
+    <header class="page-head">
+      <p class="eyebrow">Waiting for a person</p>
+      <h1>Approvals</h1>
+      <p class="lede">
+        Calls the policy held for your group, with arguments redacted the way the log keeps them.
+      </p>
+    </header>
     <div class="split">
       <section aria-labelledby="queue-title">
         <h2 id="queue-title">Pending ({{ pending().length }})</h2>
@@ -34,7 +40,7 @@ import { prettyJson } from '../diff';
               </button>
             </li>
           } @empty {
-            <li class="muted">No calls waiting.</li>
+            <li class="muted empty">No calls waiting.</li>
           }
         </ul>
       </section>
