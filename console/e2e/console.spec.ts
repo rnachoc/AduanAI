@@ -255,3 +255,27 @@ test('a simulation of the active policy over the demo traffic changes nothing', 
   await expect(page.getByRole('status')).toContainText(' 0 would change');
   await capture(page, 'simulation');
 });
+
+test('security sees the refund the injected page asked for, held for an untrusted flow', async ({
+  page,
+}) => {
+  await signIn(page, 'security@example.com');
+  await page.goto('/#/approvals');
+  const rows = page.locator('button.row');
+  await rows.first().waitFor();
+  const count = await rows.count();
+  for (let i = 0; i < count; i++) {
+    await rows.nth(i).click();
+    try {
+      await expect(page.locator('section.detail')).toContainText('FLOW_FROM_UNTRUSTED', {
+        timeout: 1000,
+      });
+      break;
+    } catch {
+      // another approval
+    }
+  }
+  await expect(page.locator('section.detail')).toContainText('untrusted-flow-into-side-effects');
+  await expect(page.locator('section.detail')).toContainText('[REDACTED:iban:XX20…6001]');
+  await capture(page, 'approvals-untrusted');
+});
