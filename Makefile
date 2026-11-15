@@ -139,7 +139,7 @@ test-console: ## Unit-test the console (70 % line coverage) and build it
 	$(CONSOLE_NODE) sh -c 'npm ci --no-audit --no-fund --loglevel=error && npm test && npm run --silent build'
 
 demo: ## Seed the running stack and run the scripted scenarios through it, leaving data in the console
-	$(COMPOSE) up -d --wait crm payments webfetch
+	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
 	KEY=$$($(SEED)) && sh scripts/e2e_round.sh "$$KEY"
 
 console-e2e: ## Run the Playwright console flows and axe against the running stack; saves docs/images
