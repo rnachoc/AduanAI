@@ -1,17 +1,53 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Ignacio Rodríguez Caro
 import { createServer, type Server } from 'node:http';
-import type { BrowserContext, Page } from '@playwright/test';
+import { type BrowserContext, type Page, request } from '@playwright/test';
 
 /** Settings read from the environment `make console-e2e` passes. */
 export const settings = {
   url: process.env['CONSOLE_URL'] ?? 'http://localhost:8780',
-  agentKey: process.env['AGENT_KEY'] ?? '',
   adminEmail: process.env['ADUANA_ADMIN_EMAIL'] ?? 'admin@example.com',
   password: process.env['ADUANA_ADMIN_PASSWORD'] ?? 'local-only',
   stubHost: process.env['STUB_HOST'] ?? 'localhost',
   screenshots: process.env['SCREENSHOTS'] ?? '',
 };
+
+let ownKey: Promise<string> | null = null;
+
+/**
+ * Creates, once per run, an agent of its own (team support) and returns its key, so the flows never
+ * spend the demo agent's rate or budget counters.
+ *
+ * @returns the API key
+ * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+ */
+export function agentKey(): Promise<string> {
+  ownKey ??= (async () => {
+    const api = await request.newContext({ baseURL: settings.url });
+    await api.post('/api/v1/auth/login', {
+      data: { email: settings.adminEmail, password: settings.password },
+    });
+    await api.get('/api/v1/auth/me');
+    const token =
+      (await api.storageState()).cookies.find((cookie) => cookie.name === 'XSRF-TOKEN')?.value ??
+      '';
+    const headers = { 'x-xsrf-token': token };
+    const principal = await api.post('/api/v1/principals', {
+      headers,
+      data: {
+        kind: 'agent',
+        name: `console-e2e-${Date.now()}`,
+        attributes: { team: 'support', env: 'demo' },
+      },
+    });
+    const id = ((await principal.json()) as { id: string }).id;
+    const key = await api.post(`/api/v1/principals/${id}/keys`, { headers, data: {} });
+    const secret = ((await key.json()) as { secret: string }).secret;
+    await api.dispose();
+    return secret;
+  })();
+  return ownKey;
+}
 
 /**
  * Signs in through the sign-in screen.
@@ -45,7 +81,7 @@ export async function callTool(
     headers: {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
-      authorization: `Bearer ${settings.agentKey}`,
+      authorization: `Bearer ${await agentKey()}`,
       'mcp-protocol-version': '2026-07-28',
       'mcp-method': 'tools/call',
       'mcp-name': name,

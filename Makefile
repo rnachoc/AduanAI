@@ -143,8 +143,8 @@ demo: ## Seed the running stack and run the scripted scenarios through it, leavi
 	KEY=$$($(SEED)) && sh scripts/e2e_round.sh "$$KEY"
 
 console-e2e: ## Run the Playwright console flows and axe against the running stack; saves docs/images
-	KEY=$$($(SEED)) && docker run --rm --network $(NETWORK) --hostname console-e2e --env-file .env \
-	-e AGENT_KEY="$$KEY" -e CONSOLE_URL=http://gateway:8080 -e STUB_HOST=console-e2e \
+	$(SEED) > /dev/null && docker run --rm --network $(NETWORK) --hostname console-e2e --env-file .env \
+	-e CONSOLE_URL=http://gateway:8080 -e STUB_HOST=console-e2e \
 	-e SCREENSHOTS=/src/docs/images -v "$(CURDIR)":/src -w /src/console $(PLAYWRIGHT_IMAGE) \
 	sh -c 'test -d node_modules || npm ci --no-audit --no-fund --loglevel=error; npx playwright test'
 

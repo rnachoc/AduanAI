@@ -12,6 +12,7 @@ export default defineConfig({
   use: {
     baseURL: process.env['CONSOLE_URL'] ?? 'http://localhost:8780',
     viewport: { width: 1360, height: 860 },
+    colorScheme: 'dark',
     trace: 'off',
   },
 });
