@@ -169,6 +169,38 @@ class AuditLogTest {
   }
 
   @Test
+  void an_entry_is_committed_when_append_returns_even_under_concurrency() throws Exception {
+    try (ExecutorService pool = Executors.newFixedThreadPool(20)) {
+      List<Callable<Boolean>> checks =
+          IntStream.range(0, 40)
+              .mapToObj(i ->
+                  (Callable<Boolean>)
+                      () -> {
+                        long seq =
+                            audit
+                                .append(
+                                    Tenants.DEFAULT,
+                                    AuditRecord.of("TOOL_CHANGED").reason("C" + i).build())
+                                .seq();
+                        try (Connection connection = TestDatabase.ownerConnection();
+                            var statement =
+                                connection.prepareStatement(
+                                    "select count(*) from audit_entry where seq = ? and reason_code = ?")) {
+                          statement.setLong(1, seq);
+                          statement.setString(2, "C" + i);
+                          try (var rows = statement.executeQuery()) {
+                            return rows.next() && rows.getLong(1) == 1;
+                          }
+                        }
+                      })
+              .toList();
+      for (var future : pool.invokeAll(checks)) {
+        assertThat(future.get()).isTrue();
+      }
+    }
+  }
+
+  @Test
   void the_application_role_cannot_update_or_delete_entries() {
     audit.append(Tenants.DEFAULT, AuditRecord.of("TOOL_CHANGED").build());
     assertThatThrownBy(() -> jdbc.sql("update audit_entry set type = 'X' where seq = 1").update())
