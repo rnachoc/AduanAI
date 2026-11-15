@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# A production starting point: the released image and PostgreSQL, no demo servers, no development
+# defaults. Every secret comes from the environment (see deploy/prod.env.example) and must be set.
+# Put a TLS proxy in front: the gateway listens on 127.0.0.1 only.
+#   docker compose -f deploy/compose.prod.yaml --env-file deploy/prod.env up -d
+name: aduana-prod
+
+services:
+  postgres:
+    image: postgres:18.7@sha256:9f4fd4aa918f52ae3d6f3b687f1de90d8f867cd4d520021545a9a50c120eae3b
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aduana
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "aduana"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+  gateway:
+    image: ${ADUANA_IMAGE:?set ADUANA_IMAGE, e.g. ghcr.io/<owner>/aduana:0.1.0}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8080}:8080"
+    environment:
+      SPRING_CONFIG_IMPORT: optional:file:/etc/aduana/upstreams.yaml
+      ADUANA_POLICY_DIRECTORY: /etc/aduana/policy
+      ADUANA_DATABASE_URL: jdbc:postgresql://postgres:5432/aduana
+      ADUANA_DATABASE_USER: ${POSTGRES_USER}
+      ADUANA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      ADUANA_MASTER_KEY: ${ADUANA_MASTER_KEY:?set ADUANA_MASTER_KEY to base64 of 32 random bytes}
+      ADUANA_BOOTSTRAP_ADMIN_EMAIL: ${ADUANA_ADMIN_EMAIL:?set ADUANA_ADMIN_EMAIL}
+      ADUANA_BOOTSTRAP_ADMIN_PASSWORD: ${ADUANA_ADMIN_PASSWORD:?set ADUANA_ADMIN_PASSWORD}
+      ADUANA_SECURE_COOKIES: "true"
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    volumes:
+      - ${ADUANA_UPSTREAMS_FILE:?set ADUANA_UPSTREAMS_FILE}:/etc/aduana/upstreams.yaml:ro
+      - ${ADUANA_POLICY_DIR:?set ADUANA_POLICY_DIR}:/etc/aduana/policy:ro
+
+volumes:
+  postgres-data:
