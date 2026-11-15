@@ -5,6 +5,7 @@ package io.github.rnachoc.aduana.gateway.web.api;
 import io.github.rnachoc.aduana.gateway.identity.ConsoleUser;
 import io.github.rnachoc.aduana.gateway.policy.PolicyRepository;
 import io.github.rnachoc.aduana.gateway.policy.PolicyService;
+import io.github.rnachoc.aduana.gateway.policy.PolicySimulator;
 import io.github.rnachoc.aduana.gateway.policy.PolicySource;
 import io.github.rnachoc.aduana.policy.PolicyBundle;
 import io.github.rnachoc.aduana.policy.PolicyTestRunner;
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class PolicyController {
 
   private final PolicyService policies;
+  private final PolicySimulator simulator;
 
   /**
    * A bundle to load.
@@ -72,13 +74,26 @@ public class PolicyController {
   public record Loaded(String sha256, int rules, int tests) {}
 
   /**
+   * A simulation request: a candidate bundle and the range of the log to replay.
+   *
+   * @param policy the candidate policy.yaml
+   * @param tests the candidate test files by name
+   * @param fromSeq the first entry; the newest 20 000 entries when absent
+   * @param toSeq the last entry; the end when absent
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public record SimulateBody(String policy, Map<String, String> tests, Long fromSeq, Long toSeq) {}
+
+  /**
    * Creates the controller.
    *
    * @param policies the policy service
+   * @param simulator replays logged decisions against a candidate
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public PolicyController(PolicyService policies) {
+  public PolicyController(PolicyService policies, PolicySimulator simulator) {
     this.policies = policies;
+    this.simulator = simulator;
   }
 
   /**
@@ -127,6 +142,41 @@ public class PolicyController {
       case PolicyService.LoadResult.Rejected(List<String> errors) -> {
         ProblemDetail problem =
             ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "The policy was not loaded.");
+        problem.setType(URI.create("about:blank"));
+        problem.setProperty("code", "POLICY_REJECTED");
+        problem.setProperty("errors", errors);
+        yield ResponseEntity.badRequest().body(problem);
+      }
+    };
+  }
+
+  /**
+   * Replays logged decisions against a candidate policy without loading it.
+   *
+   * @param user the signed-in administrator
+   * @param body the candidate and the range
+   * @return 200 with the result, or 400 with the candidate's errors
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  @PostMapping("/simulate")
+  public ResponseEntity<?> simulate(
+      @AuthenticationPrincipal ConsoleUser user, @RequestBody SimulateBody body) {
+    PolicySource source =
+        new PolicySource(
+            Optional.ofNullable(body.policy()).orElse(""),
+            Optional.ofNullable(body.tests()).orElse(Map.of()));
+    PolicySimulator.Outcome outcome =
+        simulator.simulate(
+            user.tenantId(),
+            source,
+            Optional.ofNullable(body.fromSeq()),
+            Optional.ofNullable(body.toSeq()));
+    return switch (outcome) {
+      case PolicySimulator.Outcome.Ran(PolicySimulator.Result result) -> ResponseEntity.ok(result);
+      case PolicySimulator.Outcome.Invalid(List<String> errors) -> {
+        ProblemDetail problem =
+            ProblemDetail.forStatusAndDetail(
+                HttpStatus.BAD_REQUEST, "The candidate does not parse.");
         problem.setType(URI.create("about:blank"));
         problem.setProperty("code", "POLICY_REJECTED");
         problem.setProperty("errors", errors);

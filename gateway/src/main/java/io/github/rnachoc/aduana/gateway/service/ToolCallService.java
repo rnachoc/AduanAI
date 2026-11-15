@@ -18,6 +18,7 @@ import io.github.rnachoc.aduana.gateway.inspection.TaintService;
 import io.github.rnachoc.aduana.gateway.limits.IdempotencyService;
 import io.github.rnachoc.aduana.gateway.limits.LimitService;
 import io.github.rnachoc.aduana.gateway.mcp.McpProtocol;
+import io.github.rnachoc.aduana.gateway.policy.ArgumentObligations;
 import io.github.rnachoc.aduana.gateway.policy.PolicyService;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamClient;
 import io.github.rnachoc.aduana.gateway.upstream.UpstreamResponse;
@@ -163,7 +164,7 @@ public class ToolCallService {
             offered.tool(),
             forwardedArguments,
             new CallContext.ContextFacts(taint.flowFromUntrusted(), taint.contextTainted()));
-    Decision decision = applyArgumentObligations(decided.decision(), logged.found());
+    Decision decision = ArgumentObligations.apply(decided.decision(), logged.found());
     AuditRecord.Builder intent =
         AuditRecord.of("CALL_DECIDED")
             .principal(principal.id())
@@ -575,27 +576,6 @@ public class ToolCallService {
       throw errors.toolNotFound();
     }
     return result;
-  }
-
-  /**
-   * Turns an allow or an approval into a deny when the arguments contain a value of a detector the
-   * matching rules list under `deny_args_containing`.
-   *
-   * @param decision the policy's decision
-   * @param found detectors that fired on the arguments
-   * @return the decision to apply
-   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
-   */
-  private static Decision applyArgumentObligations(Decision decision, Set<String> found) {
-    Set<String> forbidden = new TreeSet<>(decision.obligations().denyArgsContaining());
-    forbidden.retainAll(found);
-    if (forbidden.isEmpty()) {
-      return decision;
-    }
-    return new Decision.Deny(
-        "ARGS_CONTAIN_" + forbidden.iterator().next().toUpperCase(Locale.ROOT),
-        decision.matchedRules(),
-        decision.typeMismatches());
   }
 
   /**

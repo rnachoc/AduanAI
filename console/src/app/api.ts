@@ -102,6 +102,25 @@ export interface ActivePolicy {
   readonly results: readonly { file: string; name: string; problems: readonly string[] }[];
 }
 
+/** The result of replaying logged decisions against a candidate policy. */
+export interface Simulation {
+  readonly candidateSha256: string;
+  readonly firstSeq: number;
+  readonly lastSeq: number;
+  readonly decisions: number;
+  readonly changed: number;
+  readonly unchanged: number;
+  readonly unknown: number;
+  readonly changes: readonly {
+    rules: string;
+    before: string;
+    after: string;
+    count: number;
+    examples: readonly { seq: number; tool: string; principal: string }[];
+  }[];
+  readonly unknowns: readonly { seq: number; tool: string; reason: string }[];
+}
+
 /** An agent or user principal. */
 export interface Principal {
   readonly id: string;
@@ -211,6 +230,16 @@ export class Api {
   }
 
   /**
+   * Reads where the log ends, without verifying it.
+   *
+   * @returns the newest seq and its time
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  head(): Promise<{ lastSeq: number; ts: string }> {
+    return firstValueFrom(this.http.get<{ lastSeq: number; ts: string }>('/api/v1/audit/head'));
+  }
+
+  /**
    * Verifies the chain on the server.
    *
    * @returns the verification
@@ -259,6 +288,19 @@ export class Api {
    */
   policy(): Promise<ActivePolicy> {
     return firstValueFrom(this.http.get<ActivePolicy>('/api/v1/policy'));
+  }
+
+  /**
+   * Replays logged decisions against a candidate policy without loading it.
+   *
+   * @param policy - the candidate policy.yaml
+   * @param fromSeq - the first log entry, or null for the newest 20 000
+   * @returns the simulation
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  simulate(policy: string, fromSeq: number | null): Promise<Simulation> {
+    const body = fromSeq === null ? { policy, tests: {} } : { policy, tests: {}, fromSeq };
+    return firstValueFrom(this.http.post<Simulation>('/api/v1/policy/simulate', body));
   }
 
   /**

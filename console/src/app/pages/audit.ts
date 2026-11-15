@@ -27,6 +27,8 @@ import { prettyJson } from '../diff';
           <br />{{ problem.kind }} at seq {{ problem.seq }}
         }
       </p>
+    } @else {
+      <p class="banner" role="status">Verifying the chain and its signed checkpoints…</p>
     }
     <form class="filters" (ngSubmit)="search()">
       <label for="tool">Tool</label>
@@ -93,6 +95,7 @@ export class AuditPage implements OnInit {
   protected tool = '';
   protected decision = '';
   protected principal = '';
+  private lastSeq = 0;
 
   /**
    * Verifies the chain and lists the latest entries.
@@ -100,8 +103,10 @@ export class AuditPage implements OnInit {
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   async ngOnInit(): Promise<void> {
-    this.verification.set(await this.api.verify());
+    this.lastSeq = (await this.api.head()).lastSeq;
+    const verifying = this.api.verify().then((verification) => this.verification.set(verification));
     await this.search();
+    await verifying;
   }
 
   /**
@@ -111,7 +116,7 @@ export class AuditPage implements OnInit {
    */
   async search(): Promise<void> {
     const filtered = this.tool !== '' || this.decision !== '' || this.principal !== '';
-    const last = this.verification()?.lastSeq ?? 0;
+    const last = this.lastSeq;
     const entries = await this.api.audit({
       fromSeq: filtered ? 1 : last - 199,
       limit: 200,

@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+version: 1
+defaults:
+  decision: deny
+rules:
+  - id: notes-starting-with-ok
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: simshop, name: note }
+      args: [ { path: '$.text', matches: '^ok' } ]
+    effect: allow
+    obligations:
+      deny_args_containing: [card]
+  - id: small-payments
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: simshop, name: pay }
+    effect: allow
+  - id: big-payments-need-approval
+    match:
+      tool: { server: simshop, name: pay }
+      args: [ { path: '$.amount', gt: 100 } ]
+    effect: require_approval

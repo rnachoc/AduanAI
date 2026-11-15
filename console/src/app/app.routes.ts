@@ -9,6 +9,7 @@ import { CatalogPage } from './pages/catalog';
 import { IdentitiesPage } from './pages/identities';
 import { LoginPage } from './pages/login';
 import { PolicyPage } from './pages/policy';
+import { SimulationPage } from './pages/simulation';
 
 /** The console's screens and the role each needs. */
 export const routes: Routes = [
@@ -42,6 +43,12 @@ export const routes: Routes = [
     component: PolicyPage,
     canActivate: [requireRole('admin')],
     title: 'Policy · Aduana',
+  },
+  {
+    path: 'simulation',
+    component: SimulationPage,
+    canActivate: [requireRole('admin')],
+    title: 'Simulation · Aduana',
   },
   {
     path: 'identities',

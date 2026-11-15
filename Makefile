@@ -34,7 +34,7 @@ SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src
 DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo test-console console-e2e demo attacks attacks-check bench test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
+	test-policy test-audit test-gateway test-demo test-console console-e2e demo replay attacks attacks-check bench test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -147,6 +147,9 @@ console-e2e: ## Run the Playwright console flows and axe against the running sta
 	-e AGENT_KEY="$$KEY" -e CONSOLE_URL=http://gateway:8080 -e STUB_HOST=console-e2e \
 	-e SCREENSHOTS=/src/docs/images -v "$(CURDIR)":/src -w /src/console $(PLAYWRIGHT_IMAGE) \
 	sh -c 'test -d node_modules || npm ci --no-audit --no-fund --loglevel=error; npx playwright test'
+
+replay: audit-export ## Rebuild replay/index.html from the running stack's log (run make demo first)
+	docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src -w /src $(PYTHON_IMAGE) 	python scripts/build_replay.py out/audit/entries.jsonl replay/index.html --gateway http://gateway:8080
 
 attacks: ## Run the attack bench against the running stack and rewrite attacks/REPORT.md
 	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch

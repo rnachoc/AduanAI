@@ -14,6 +14,7 @@ import { CatalogPage } from './catalog';
 import { IdentitiesPage } from './identities';
 import { LoginPage } from './login';
 import { PolicyPage } from './policy';
+import { SimulationPage } from './simulation';
 
 const VERIFIED = {
   entries: 3,
@@ -125,7 +126,7 @@ describe('console screens', () => {
     const http = setUpHttp();
     const fixture = TestBed.createComponent(ActivityPage);
     const init = fixture.componentInstance.ngOnInit();
-    await answer(http, 'GET', '/api/v1/audit/verify', VERIFIED);
+    await answer(http, 'GET', '/api/v1/audit/head', { lastSeq: 3, ts: 't' });
     await answer(http, 'GET', '/api/v1/audit', [ENTRY]);
     await init;
     fixture.componentInstance.add({
@@ -194,12 +195,15 @@ describe('console screens', () => {
     const http = setUpHttp();
     const fixture = TestBed.createComponent(AuditPage);
     const init = fixture.componentInstance.ngOnInit();
-    await answer(http, 'GET', '/api/v1/audit/verify', VERIFIED);
+    await answer(http, 'GET', '/api/v1/audit/head', { lastSeq: 3, ts: 't' });
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(text(element)).toContain('Verifying the chain');
     const first = await answer(http, 'GET', '/api/v1/audit', [ENTRY]);
+    await answer(http, 'GET', '/api/v1/audit/verify', VERIFIED);
     await init;
     expect(first.params.get('from_seq')).toBe('1');
     fixture.detectChanges();
-    const element = fixture.nativeElement as HTMLElement;
     expect(text(element)).toContain('Chain intact');
     expect(text(element)).toContain('last at seq 2');
     const page = fixture.componentInstance as unknown as { tool: string; decision: string };
@@ -353,5 +357,65 @@ describe('console screens', () => {
     await settle();
     fixture.detectChanges();
     expect(text(element)).toContain('revoked 2026-11-15');
+  });
+
+  it('simulation starts from the active policy and shows changes and unknowns', async () => {
+    const http = setUpHttp();
+    const fixture = TestBed.createComponent(SimulationPage);
+    const init = fixture.componentInstance.ngOnInit();
+    await answer(http, 'GET', '/api/v1/policy', {
+      sha256: 'aa',
+      loadedAt: 't',
+      policy: 'version: 1',
+      tests: {},
+      results: [],
+    });
+    await init;
+    const run = fixture.componentInstance.run();
+    const sent = await answer(http, 'POST', '/api/v1/policy/simulate', {
+      candidateSha256: 'bb',
+      firstSeq: 1,
+      lastSeq: 9,
+      decisions: 3,
+      changed: 1,
+      unchanged: 1,
+      unknown: 1,
+      changes: [
+        {
+          rules: 'small-payments',
+          before: 'require_approval',
+          after: 'allow',
+          count: 1,
+          examples: [{ seq: 9, tool: 'shop__pay', principal: 'support-agent' }],
+        },
+      ],
+      unknowns: [{ seq: 7, tool: 'shop__note', reason: 'REDACTED_ARGUMENT $.text' }],
+    });
+    await run;
+    expect(sent.body).toEqual({ policy: 'version: 1', tests: {} });
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(text(element)).toContain('3 decisions: 1 would change, 1 unchanged, 1 unknown');
+    expect(text(element)).toContain('seq 9 (support-agent)');
+    expect(text(element)).toContain('REDACTED_ARGUMENT $.text');
+  });
+
+  it('simulation lists why a candidate was refused', async () => {
+    const http = setUpHttp();
+    const fixture = TestBed.createComponent(SimulationPage);
+    const init = fixture.componentInstance.ngOnInit();
+    await answer(http, 'GET', '/api/v1/policy', null, 404);
+    await init;
+    const run = fixture.componentInstance.run();
+    await answer(
+      http,
+      'POST',
+      '/api/v1/policy/simulate',
+      { errors: ['rules[0]: effect is required'] },
+      400,
+    );
+    await run;
+    fixture.detectChanges();
+    expect(text(fixture.nativeElement as HTMLElement)).toContain('rules[0]: effect is required');
   });
 });

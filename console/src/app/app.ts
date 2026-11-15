@@ -26,6 +26,7 @@ import { Auth } from './auth';
           @if (auth.can('admin')) {
             <a routerLink="/catalog" routerLinkActive="active">Catalog</a>
             <a routerLink="/policy" routerLinkActive="active">Policy</a>
+            <a routerLink="/simulation" routerLinkActive="active">Simulation</a>
             <a routerLink="/identities" routerLinkActive="active">Identities</a>
           }
         </nav>

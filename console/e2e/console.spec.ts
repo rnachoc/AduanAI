@@ -11,6 +11,7 @@ const SCREENS = [
   { path: '/#/catalog', heading: 'Catalog', file: 'catalog' },
   { path: '/#/policy', heading: 'Policy', file: 'policy' },
   { path: '/#/identities', heading: 'Identities', file: 'identities' },
+  { path: '/#/simulation', heading: 'Simulation', file: 'simulation' },
 ] as const;
 
 /**
@@ -157,7 +158,10 @@ test('4. review: an admin sees a changed tool description as a diff and accepts 
 test('5. search the log: refunds that needed approval, and one entry in full', async ({ page }) => {
   await signIn(page, settings.adminEmail);
   await page.goto('/#/audit');
-  await expect(page.getByRole('status').filter({ hasText: 'Chain intact' })).toBeVisible();
+  // Verifying the whole chain takes seconds once the log holds 100 000+ entries.
+  await expect(page.getByRole('status').filter({ hasText: 'Chain intact' })).toBeVisible({
+    timeout: 60_000,
+  });
   await page.getByLabel('Tool').fill('payments__refund');
   await page.getByLabel('Decision').selectOption('require_approval');
   await page.getByRole('button', { name: 'Search' }).click();
@@ -226,3 +230,28 @@ for (const theme of ['light', 'dark'] as const) {
     }
   });
 }
+
+test('the replay page works opened from disk, without a server', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+  await page.goto('file:///src/replay/index.html');
+  await expect(page.getByRole('heading', { name: 'Aduana replay' })).toBeVisible();
+  await expect(page.getByText(/^Step 1 of \d+$/)).toBeVisible();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page.getByText(/^Step 2 of \d+$/)).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByText(/^Step 3 of \d+$/)).toBeVisible();
+  expect(requests.filter((url) => !url.startsWith('file:'))).toEqual([]);
+  await capture(page, 'replay');
+});
+
+test('a simulation of the active policy over the demo traffic changes nothing', async ({
+  page,
+}) => {
+  await signIn(page, settings.adminEmail);
+  await page.goto('/#/simulation');
+  await expect(page.getByLabel('Candidate policy.yaml')).not.toHaveValue('');
+  await page.getByRole('button', { name: 'Simulate' }).click();
+  await expect(page.getByRole('status')).toContainText(' 0 would change');
+  await capture(page, 'simulation');
+});
