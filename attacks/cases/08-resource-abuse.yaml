@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# Loops, floods and oversized input meant to wear the gateway or its upstreams down.
+cases:
+  - id: RES-01
+    category: resource-abuse
+    title: A loop of 70 calls to one tool in a minute
+    defence: per-tool rate of 60 a minute answers RATE_LIMITED with retry_after_ms
+    deterministic: true
+    steps:
+      - repeat: 70
+        call: crm__get_customer
+        args: { customer_id: C-1001 }
+        expect: { seen: [RATE_LIMITED] }
+
+  - id: RES-02
+    category: resource-abuse
+    title: Arguments over the 64 KiB limit
+    defence: size limit on arguments
+    deterministic: true
+    steps:
+      - raw: >-
+          {"jsonrpc":"2.0","id":1,"method":"tools/call", "params":{"name":"crm__search_customers",
+          "arguments":{"query":"${big:70000}"},${meta}}}
+        headers: { Mcp-Method: tools/call, Mcp-Name: crm__search_customers }
+        expect: { code: [ARGS_INVALID, HTTP_413, RPC_-32600] }
+
+  - id: RES-03
+    category: resource-abuse
+    title: A request body over the 1 MiB limit
+    defence: size limit on requests
+    deterministic: true
+    steps:
+      - raw: '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"pad":"${big:1100000}"}}'
+        headers: { Mcp-Method: tools/list }
+        expect: { code: [HTTP_413, RPC_-32600] }
+
+  - id: RES-04
+    category: resource-abuse
+    title: Deeply nested JSON to exhaust the parser
+    defence: the parser's nesting limit refuses it before anything runs
+    deterministic: true
+    steps:
+      - raw: '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"crm__get_customer","arguments":{"customer_id":${nest}}}}'
+        headers: { Mcp-Method: tools/call }
+        expect: { not_code: [OK] }
+
+  - id: RES-05
+    category: resource-abuse
+    title: A tool name of 10 000 characters
+    defence: names are parsed strictly and looked up in the catalog; nothing is forwarded
+    deterministic: true
+    steps:
+      - raw: '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"crm__${big:10000}","arguments":{},${meta}}}'
+        headers: { Mcp-Method: tools/call }
+        expect: { not_code: [OK] }
+
+  - id: RES-06
+    category: resource-abuse
+    title: Reuse an idempotency key with other arguments to confuse the replay store
+    defence: same key with other arguments answers IDEMPOTENCY_CONFLICT
+    deterministic: true
+    steps:
+      - call: crm__get_customer
+        meta: { 'aduana/idempotency-key': 'atk-${run}-res06' }
+        args: { customer_id: C-1001 }
+        expect: { code: OK }
+      - call: crm__get_customer
+        meta: { 'aduana/idempotency-key': 'atk-${run}-res06' }
+        args: { customer_id: C-1002 }
+        expect: { code: IDEMPOTENCY_CONFLICT }
+
+  - id: RES-07
+    category: resource-abuse
+    title: An idempotency key of 10 000 characters
+    defence: keys are 1 to 200 characters
+    deterministic: true
+    steps:
+      - raw: >-
+          {"jsonrpc":"2.0","id":1,"method":"tools/call", "params":{"name":"crm__get_customer",
+          "arguments":{"customer_id":"C-1001"}, "_meta":{"aduana/idempotency-key":"${big:10000}",
+          "io.modelcontextprotocol/protocolVersion":"2026-07-28",
+          "io.modelcontextprotocol/clientCapabilities":{},
+          "io.modelcontextprotocol/clientInfo":{"name":"x","version":"0"}}}}
+        headers: { Mcp-Method: tools/call, Mcp-Name: crm__get_customer }
+        expect: { code: ARGS_INVALID }
+
+  - id: RES-08
+    category: resource-abuse
+    title: Forty parallel calls from one agent
+    defence: per-principal and per-tool rates hold under concurrency
+    deterministic: true
+    steps:
+      - parallel: 40
+        call: crm__search_customers
+        args: { query: Ana }
+      - parallel: 40
+        call: crm__search_customers
+        args: { query: Ana }
+        expect: { seen: [RATE_LIMITED] }
+
+  - id: RES-09
+    category: resource-abuse
+    title: A batch of JSON-RPC requests in one body to multiply work
+    defence: 2026-07-28 has no batches; the gateway refuses arrays
+    deterministic: true
+    steps:
+      - raw: '[{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}},{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}]'
+        headers: { Mcp-Method: tools/list }
+        expect: { not_code: [OK] }

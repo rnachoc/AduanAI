@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# Someone with access to the database, or to an exported copy, rewrites what happened.
+cases:
+  - id: LOG-01
+    category: log-tampering
+    title: Update an entry's decision in the database as the gateway's role
+    defence: append-only triggers refuse UPDATE on audit_entry
+    deterministic: true
+    steps:
+      - sql: "update audit_entry set decision = 'allow' where seq = (select max(seq) from audit_entry)"
+        expect: { code: SQL_ERROR }
+
+  - id: LOG-02
+    category: log-tampering
+    title: Delete the newest entry in the database as the gateway's role
+    defence: append-only triggers refuse DELETE on audit_entry
+    deterministic: true
+    steps:
+      - sql: "delete from audit_entry where seq = (select max(seq) from audit_entry)"
+        expect: { code: SQL_ERROR }
+
+  - id: LOG-03
+    category: log-tampering
+    title: Truncate the log table as the gateway's role
+    defence: the role has no TRUNCATE privilege and a trigger refuses it
+    deterministic: true
+    steps:
+      - sql: "truncate audit_entry"
+        expect: { code: SQL_ERROR }
+
+  - id: LOG-04
+    category: log-tampering
+    title: Delete a signed checkpoint as the gateway's role
+    defence: checkpoints are append-only too
+    deterministic: true
+    steps:
+      - sql: "delete from audit_checkpoint"
+        expect: { code: SQL_ERROR }
+
+  - id: LOG-05
+    category: log-tampering
+    title: Edit the arguments of an exported entry
+    defence: the entry's hash no longer matches its content
+    deterministic: true
+    steps:
+      - tamper: EDIT_ARGUMENTS
+        expect: { problem: [HASH_MISMATCH] }
+
+  - id: LOG-06
+    category: log-tampering
+    title: Change a decision and recompute that entry's hash
+    defence: the next entry's prev_hash no longer links
+    deterministic: true
+    steps:
+      - tamper: EDIT_DECISION_AND_REHASH
+        expect: { problem: [BROKEN_LINK, CHECKPOINT_MISMATCH] }
+
+  - id: LOG-07
+    category: log-tampering
+    title: Remove an entry from the middle of an export
+    defence: seq gaps and broken links
+    deterministic: true
+    steps:
+      - tamper: DELETE_ENTRY
+        expect: { problem: [SEQUENCE_GAP, BROKEN_LINK] }
+
+  - id: LOG-08
+    category: log-tampering
+    title: Cut an export back past its newest signed checkpoint
+    defence: a signed checkpoint covers entries that are missing
+    deterministic: true
+    steps:
+      - tamper: TRUNCATE_END
+        expect: { problem: [TRUNCATED, CHECKPOINT_MISMATCH] }
+
+  - id: LOG-09
+    category: log-tampering
+    title: Rewrite history and rehash every following entry, as a database owner could
+    defence: signed checkpoints kept outside the database no longer match
+    deterministic: true
+    steps:
+      - tamper: REWRITE_HISTORY
+        expect: { problem: [CHECKPOINT_MISMATCH] }
+
+  - id: LOG-10
+    category: log-tampering
+    title: Point a checkpoint at another hash and keep its signature
+    defence: Ed25519 signature over the checkpoint
+    deterministic: true
+    steps:
+      - tamper: FORGE_CHECKPOINT
+        expect: { problem: [BAD_SIGNATURE] }
+
+  - id: LOG-11
+    category: log-tampering
+    title: Swap two entries, or duplicate one
+    defence: seq order and hash links
+    deterministic: true
+    steps:
+      - tamper: SWAP_ENTRIES
+        expect: { problem: [SEQUENCE_GAP, BROKEN_LINK] }
+      - tamper: DUPLICATE_ENTRY
+        expect: { problem: [SEQUENCE_GAP, BROKEN_LINK] }
+
+  - id: LOG-12
+    category: log-tampering
+    title: Backdate an entry and rehash the rest of the chain
+    defence: times must not go backwards; checkpoints no longer match
+    deterministic: true
+    steps:
+      - tamper: BACKDATE_ENTRY
+        expect: { problem: [TIME_REVERSED, CHECKPOINT_MISMATCH] }
+
+  - id: LOG-13
+    category: log-tampering
+    title: Ask the administration API to change or delete log entries
+    defence: the API has no route that writes the log
+    deterministic: true
+    steps:
+      - http: DELETE /api/v1/audit
+        as: admin
+        expect: { status: [403, 404, 405] }
+      - http: PUT /api/v1/audit/verify
+        as: admin
+        body: { intact: true }
+        expect: { status: [403, 404, 405] }

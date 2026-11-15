@@ -1,0 +1,498 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The demo policy plus filler rules that never match the benchmark agent, so every call is decided
+# against 50 rules (plan Phase 11). Generated once from demo/policy/policy.yaml; keep both in step.
+# The demo policy: what the support, finance and audit agents may do with the demo servers.
+# Anything no rule allows is denied, so most limits below are written as narrow allow rules.
+version: 1
+defaults:
+  decision: deny
+rules:
+  - id: untrusted-flow-into-side-effects
+    description: A value copied from an untrusted page into a call with side effects needs security.
+    # First in the file: when several approval rules match, the first one names the approvers.
+    # An approval rule is a grant through a person, so it is scoped to teams that may act at all.
+    match:
+      principal: { attributes: { team: { in: [support, finance] } } }
+      tool: { side_effect: true }
+      context: { flow_from_untrusted: true }
+    effect: require_approval
+    approval: { approvers_group: security, expires_in: 15m }
+
+  - id: crm-read
+    description: Support agents may look customers up; contact details come back redacted.
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: crm, name: { in: [get_customer, search_customers] } }
+    effect: allow
+    obligations:
+      redact_result: [email, phone_es, dni_nie, iban]
+      deny_args_containing: [card, secret]
+
+  - id: finance-searches-names
+    description: Finance agents may search customers by name but not open their records.
+    match:
+      principal: { attributes: { team: finance } }
+      tool: { server: crm, name: search_customers }
+    effect: allow
+    obligations:
+      redact_result: [email, phone_es]
+
+  - id: crm-search-query-too-long
+    description: A search string of 51 characters or more is data being smuggled, not a name.
+    match:
+      tool: { server: crm, name: search_customers }
+      args:
+        - { path: '$.query', matches: '.{51}' }
+    effect: deny
+    reason_code: SEARCH_QUERY_TOO_LONG
+
+  - id: crm-email-change-needs-a-lead
+    description: Changing a customer's e-mail to another example.com address needs a support lead.
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: crm, name: update_customer_email }
+      args:
+        - { path: '$.email', matches: "@([a-z0-9-]+\\.)*example\\.com$" }
+    effect: require_approval
+    approval: { approvers_group: support-leads, expires_in: 30m }
+
+  - id: tainted-agents-do-not-change-emails
+    description: After reading the open web, an agent does not change contact details at all.
+    match:
+      tool: { server: crm, name: update_customer_email }
+      context: { context_tainted: true }
+    effect: deny
+    reason_code: TAINTED_CONTEXT
+
+  - id: orders-read
+    description: Support, finance and audit agents may read orders and refunds.
+    match:
+      principal: { attributes: { team: { in: [support, finance, audit] } } }
+      tool: { server: payments, name: { in: [get_order, list_refunds] } }
+    effect: allow
+    obligations:
+      redact_result: [iban]
+
+  - id: refunds-need-a-person
+    description: A refund to a test account (country XX) goes ahead only once finance approves it.
+    match:
+      principal: { attributes: { team: { in: [support, finance] } } }
+      tool: { server: payments, name: refund }
+      args:
+        - { path: '$.destination_iban', matches: '^XX' }
+    effect: require_approval
+    approval: { approvers_group: finance, expires_in: 15m }
+
+  - id: big-refunds-denied
+    description: Refunds above 500 EUR go through the back office, never through an agent.
+    match:
+      tool: { server: payments, name: refund }
+      args:
+        - { path: '$.amount_cents', gt: 50000 }
+    effect: deny
+    reason_code: REFUND_OVER_LIMIT
+
+  - id: refunds-need-a-reason
+    description: An approver needs to see why; a refund without a reason is refused.
+    match:
+      tool: { server: payments, name: refund }
+      args:
+        - { path: '$.reason', exists: false }
+    effect: deny
+    reason_code: REFUND_NEEDS_REASON
+
+  - id: audit-never-acts
+    description: Audit agents read; they never call a tool with side effects.
+    match:
+      principal: { attributes: { team: audit } }
+      tool: { side_effect: true }
+    effect: deny
+    reason_code: AUDIT_IS_READ_ONLY
+
+  - id: production-is-off-limits
+    description: An agent labelled for production never acts through the demo gateway.
+    match:
+      principal: { attributes: { env: prod } }
+      tool: { side_effect: true }
+    effect: deny
+    reason_code: PRODUCTION_OFF_LIMITS
+
+  - id: web-read
+    description: Support agents may read pages on example domains, and nothing else on the web.
+    match:
+      principal: { attributes: { team: support } }
+      tool: { server: webfetch, name: fetch_url }
+      args:
+        - { path: '$.url', matches: "^https://([a-z0-9-]+\\.)*example\\.com/" }
+    effect: allow
+
+  - id: bench-filler-01
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-01 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9001$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-02
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-02 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9002$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-03
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-03 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9003$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-04
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-04 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9004$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-05
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-05 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9005$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-06
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-06 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9006$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-07
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-07 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9007$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-08
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-08 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9008$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-09
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-09 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9009$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-10
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-10 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9010$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-11
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-11 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9011$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-12
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-12 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9012$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-13
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-13 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9013$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-14
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-14 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9014$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-15
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-15 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9015$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-16
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-16 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9016$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-17
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-17 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9017$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-18
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-18 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9018$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-19
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-19 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9019$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-20
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-20 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9020$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-21
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-21 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9021$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-22
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-22 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9022$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-23
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-23 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9023$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-24
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-24 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9024$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-25
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-25 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9025$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-26
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-26 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9026$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-27
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-27 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9027$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-28
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-28 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9028$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-29
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-29 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9029$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-30
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-30 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9030$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-31
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-31 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9031$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-32
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-32 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9032$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-33
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-33 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9033$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-34
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-34 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9034$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-35
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-35 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9035$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-36
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-36 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9036$' }
+    effect: deny
+    reason_code: BENCH_FILLER
+
+  - id: bench-filler-37
+    description: Never matches the benchmark agent; makes the evaluator check 50 rules.
+    match:
+      principal: { attributes: { team: bench-team-37 } }
+      tool: { server: crm, name: get_customer }
+      args:
+        - { path: '$.customer_id', matches: '^C-9037$' }
+    effect: deny
+    reason_code: BENCH_FILLER

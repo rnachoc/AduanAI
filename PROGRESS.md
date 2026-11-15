@@ -13,7 +13,7 @@
 | 8 | Limits, idempotency and stdio servers | done |
 | 9 | Console | done |
 | 10 | Simulation and replay | not started |
-| 11 | Attack bench, performance and reports | not started |
+| 11 | Attack bench, performance and reports | done |
 | 12 | Packaging, documentation and publication | not started |
 
 ## Phase 0: Foundations
@@ -219,3 +219,22 @@ Done on branch `phase-09-console`, merged into `main`.
 | CA9.3 axe-core (licence checked) without critical errors on the six screens | met: no `critical` or `serious` violation in light and dark; axe-core is MPL-2.0 (ADR 20) |
 | CA9.4 a `viewer` sees no approve buttons and the API answers 403 by hand | met: viewer flow (no Approvals link, guard returns to Activity, POST approve → 403) |
 | CA9.5 real screenshots in `docs/images/` with `make demo` data | met: six PNGs from `make console-e2e` after `make demo` |
+
+## Phase 11: Attack bench, performance and reports
+
+Done on branch `phase-11-attacks`, merged into `main`. Phase 10 (simulation and replay) is postponed
+after Phase 12, as the plan's cut line allows.
+
+- Tests first (`AttackBenchTest` 5, `AuditLogTest` +1, `test_check_readme_numbers.py` 5): `7163f5c`.
+- `aduana attacks run`, 91 cases, `make attacks`, `make attacks-check`, CI: `3779a7f`.
+- Group commit for the log and asynchronous counter commits (ADR 21): `70550ee`.
+- `bench/Bench.java`, 50-rule policy, `make bench`: `381a7ce`.
+- `scripts/check_readme_numbers.py` in `make lint`: `18e352e`.
+- Reports, `docs/threat-model.md`, ADR 21, ADR 22, ADR 9 amended, evidence.
+
+| CA | Result |
+|---|---|
+| CA11.1 at least 80 cases, minimum per category | met: 91 cases; every category at or above its minimum (`the_published_cases_meet_the_minimum_per_category`) |
+| CA11.2 100 % of deterministic cases stopped; heuristic ones reported with their real rate and the ones that escape | met: 78 of 78 deterministic; heuristic 7 of 13, the six escapes listed in `attacks/REPORT.md` |
+| CA11.3 published report with measured numbers; added p99 at most 50 ms at 200 req/s (objective 15 ms) | met: 15.5 ms added p99 at 200 req/s (`bench/REPORT.md`); the 15 ms objective is missed by 0.5 ms |
+| CA11.4 CI fails if a README number is edited by hand | met: `check_readme_numbers.py` in `make lint`; its test shows a hand-edited number failing |

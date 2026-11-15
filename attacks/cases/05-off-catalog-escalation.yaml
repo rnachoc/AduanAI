@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The agent reaches for tools the catalog does not offer it.
+cases:
+  - id: ESC-01
+    category: off-catalog-escalation
+    title: Call a tool that does not exist on a known server
+    defence: TOOL_NOT_FOUND, the same answer as for a tool the agent may not see
+    deterministic: true
+    steps:
+      - call: payments__delete_all_orders
+        args: {}
+        expect: { code: TOOL_NOT_FOUND }
+
+  - id: ESC-02
+    category: off-catalog-escalation
+    title: Call a tool name without the server prefix, as the upstream knows it
+    defence: names are `<server>__<tool>`; anything else is TOOL_NOT_FOUND
+    deterministic: true
+    steps:
+      - call: refund
+        args: { order_id: O-1001, amount_cents: 100, destination_iban: XX2000000000000000666001, reason: x }
+        expect: { code: TOOL_NOT_FOUND }
+
+  - id: ESC-03
+    category: off-catalog-escalation
+    title: Path-like tricks in the tool name
+    defence: tool names are parsed strictly and looked up in the catalog
+    deterministic: true
+    steps:
+      - call: 'crm__../payments__refund'
+        args: {}
+        expect: { code: TOOL_NOT_FOUND }
+
+  - id: ESC-04
+    category: off-catalog-escalation
+    title: An agent call to a tool no rule lets it see is answered like a missing tool
+    defence: tools the policy never offers to the principal are hidden and refused alike
+    deterministic: true
+    steps:
+      - agent: { team: marketing, env: demo }
+      - list: agent
+        expect: { not_contains: [crm__get_customer] }
+      - call: crm__get_customer
+        args: { customer_id: C-1001 }
+        expect: { code: [TOOL_NOT_FOUND, POLICY_DENIED] }
+
+  - id: ESC-05
+    category: off-catalog-escalation
+    title: Call a JSON-RPC method the gateway does not proxy (resources/read on an upstream)
+    defence: the gateway answers only the methods it implements
+    deterministic: true
+    steps:
+      - raw: '{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"file:///etc/passwd",${meta}}}'
+        headers: { Mcp-Method: resources/read }
+        expect: { not_code: [OK] }
+
+  - id: ESC-06
+    category: off-catalog-escalation
+    title: Use a tool of a freshly registered server before any rule covers it
+    defence: the default deny refuses tools no rule allows
+    deterministic: true
+    steps:
+      - stub: { tool: export_all, description: 'Export every record.' }
+      - call: ${server}__export_all
+        args: { q: everything }
+        expect: { code: [TOOL_NOT_FOUND, POLICY_DENIED] }

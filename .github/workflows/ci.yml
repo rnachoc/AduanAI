@@ -35,6 +35,9 @@ jobs:
       - run: make up
       - run: make smoke
       - run: make e2e
+      - run: make demo
+      - run: make console-e2e
+      - run: make attacks-check
       - if: failure()
         run: docker compose logs
       - if: always()

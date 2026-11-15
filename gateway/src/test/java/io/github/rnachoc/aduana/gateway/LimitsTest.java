@@ -40,6 +40,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -73,6 +74,7 @@ class LimitsTest {
   @Autowired private AuditLog audit;
   @Autowired private JdbcClient jdbc;
   @Autowired private AduanaProperties properties;
+  @Autowired private PlatformTransactionManager transactionManager;
   private McpTestClient agent;
 
   /**
@@ -199,11 +201,12 @@ class LimitsTest {
   @Test
   void the_counters_are_in_the_database_so_a_restarted_service_still_refuses() {
     UUID principal = UUID.randomUUID();
-    LimitService before = new LimitService(jdbc, Clock.systemUTC(), properties);
+    LimitService before = new LimitService(jdbc, Clock.systemUTC(), properties, transactionManager);
     for (int i = 0; i < 3; i++) {
       before.admit(Tenants.DEFAULT, principal, "lim__echo", 0);
     }
-    LimitService afterRestart = new LimitService(jdbc, Clock.systemUTC(), properties);
+    LimitService afterRestart =
+        new LimitService(jdbc, Clock.systemUTC(), properties, transactionManager);
     assertThat(afterRestart.admit(Tenants.DEFAULT, principal, "lim__echo", 0))
         .map(LimitService.Refusal::code)
         .contains("RATE_LIMITED");

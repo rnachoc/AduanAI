@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The caller pretends to be someone else, or borrows the gateway's own authority.
+cases:
+  - id: DEP-01
+    category: confused-deputy
+    title: No credential at all
+    defence: agent authentication on /mcp answers 401
+    deterministic: true
+    steps:
+      - call: crm__get_customer
+        key: none
+        args: { customer_id: C-1001 }
+        expect: { status: [401] }
+
+  - id: DEP-02
+    category: confused-deputy
+    title: A well-formed key whose secret is wrong
+    defence: keys are compared by SHA-256 of the whole secret
+    deterministic: true
+    steps:
+      - call: crm__get_customer
+        key: invalid
+        args: { customer_id: C-1001 }
+        expect: { status: [401] }
+
+  - id: DEP-03
+    category: confused-deputy
+    title: A revoked key
+    defence: revocation takes effect on the next call
+    deterministic: true
+    steps:
+      - call: crm__get_customer
+        key: revoked
+        args: { customer_id: C-1001 }
+        expect: { status: [401] }
+
+  - id: DEP-04
+    category: confused-deputy
+    title: Claim another team in _meta to pass a team rule
+    defence: attributes come from the principal record, never from the request
+    deterministic: true
+    steps:
+      - agent: { team: audit, env: demo }
+      - call: payments__refund
+        meta: { team: support, 'aduana/principal': support-agent }
+        args: { order_id: O-1001, amount_cents: 1000, destination_iban: XX2000000000000000666001, reason: claimed team }
+        expect: { code: POLICY_DENIED }
+
+  - id: DEP-05
+    category: confused-deputy
+    title: Claim another identity through headers a proxy might set
+    defence: only the bearer key identifies the agent
+    deterministic: true
+    steps:
+      - agent: { team: audit, env: demo }
+      - call: payments__refund
+        headers: { X-Forwarded-User: support-agent, X-Aduana-Principal: support-agent, X-Team: support }
+        args: { order_id: O-1001, amount_cents: 1000, destination_iban: XX2000000000000000666001, reason: claimed header }
+        expect: { code: POLICY_DENIED }
+
+  - id: DEP-06
+    category: confused-deputy
+    title: A finance agent, allowed to search names, opens a full customer record
+    defence: finance-searches-names allows only the search; the record falls to the default deny
+    deterministic: true
+    steps:
+      - agent: { team: finance, env: demo }
+      - call: crm__search_customers
+        args: { query: Ana }
+        expect: { code: OK }
+      - call: crm__get_customer
+        args: { customer_id: C-1001 }
+        expect: { code: [POLICY_DENIED, TOOL_NOT_FOUND] }
+
+  - id: DEP-07
+    category: confused-deputy
+    title: A JWT signed with alg none instead of an API key
+    defence: without an OIDC issuer configured, only Aduana API keys are accepted
+    deterministic: true
+    steps:
+      - call: crm__get_customer
+        key: none
+        headers: { Authorization: 'Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJzdXBwb3J0LWFnZW50In0.' }  # gitleaks:allow
+        args: { customer_id: C-1001 }
+        expect: { status: [401] }
+
+  - id: DEP-08
+    category: confused-deputy
+    title: A console session cookie used to call tools
+    defence: /mcp accepts agent credentials only
+    deterministic: true
+    steps:
+      - http: POST /mcp
+        as: admin
+        body: { jsonrpc: '2.0', id: 1, method: tools/call, params: { name: crm__get_customer, arguments: { customer_id: C-1001 } } }
+        expect: { status: [401, 403] }

@@ -34,7 +34,7 @@ SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src
 DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo test-console console-e2e demo test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
+	test-policy test-audit test-gateway test-demo test-console console-e2e demo attacks attacks-check bench test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -61,6 +61,7 @@ lint: lint-image ## Run every static check: authorship, commits, formats, secret
 	$(LINT) python scripts/check_authorship.py
 	$(LINT) python scripts/check_commits.py --range HEAD
 	$(LINT) python scripts/check_pinned_images.py
+	$(LINT) python scripts/check_readme_numbers.py
 	$(LINT) ruff check scripts verifier
 	$(LINT) ruff format --check scripts verifier
 	$(LINT) yamllint -s -c build-config/yamllint.yaml .
@@ -146,6 +147,22 @@ console-e2e: ## Run the Playwright console flows and axe against the running sta
 	-e AGENT_KEY="$$KEY" -e CONSOLE_URL=http://gateway:8080 -e STUB_HOST=console-e2e \
 	-e SCREENSHOTS=/src/docs/images -v "$(CURDIR)":/src -w /src/console $(PLAYWRIGHT_IMAGE) \
 	sh -c 'test -d node_modules || npm ci --no-audit --no-fund --loglevel=error; npx playwright test'
+
+attacks: ## Run the attack bench against the running stack and rewrite attacks/REPORT.md
+	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
+	$(MAVEN) -pl cli -am -DskipTests package
+	docker run --rm --network $(NETWORK) --hostname attacks-runner --env-file .env -v "$(CURDIR)":/src -w /src \
+	$(JDK_IMAGE) java -jar cli/target/aduana-cli.jar attacks run --url http://gateway:8080 \
+	--db-url jdbc:postgresql://postgres:5432/aduana --stub-host attacks-runner
+
+attacks-check: attacks ## Fail when the committed attack report differs from a fresh run
+	git diff --exit-code -- attacks/REPORT.md
+
+bench: ## Measure the latency Aduana adds at 50, 200 and 500 requests per second; writes bench/REPORT.md
+	$(COMPOSE) -f compose.yaml -f bench/compose.bench.yaml up -d --wait --force-recreate gateway crm
+	docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src -w /src \
+	$(JDK_IMAGE) java bench/Bench.java
+	$(COMPOSE) up -d --wait --force-recreate gateway
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks

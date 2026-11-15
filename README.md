@@ -32,8 +32,8 @@ make test    # every test suite
 | 7 | Redaction, injection flags and taint | done |
 | 8 | Limits, idempotency and stdio servers | done |
 | 9 | Console | done |
-| 10 | Simulation and replay | not started |
-| 11 | Attack bench, performance and reports | not started |
+| 10 | Simulation and replay | postponed (cut line) |
+| 11 | Attack bench, performance and reports | done |
 | 12 | Packaging, documentation and publication | not started |
 
 ## Licence
