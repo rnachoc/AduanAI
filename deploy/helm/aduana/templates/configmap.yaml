@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aduana.fullname" . }}
+  labels:
+    {{- include "aduana.labels" . | nindent 4 }}
+data:
+  upstreams.yaml: |
+    {{- .Values.upstreams | trim | nindent 4 }}
+  policy.yaml: |
+    {{- index .Values.policy "policy.yaml" | trim | nindent 4 }}
+  {{- range $name, $body := .Values.policy.tests }}
+  test-{{ $name }}: |
+    {{- $body | trim | nindent 4 }}
+  {{- end }}

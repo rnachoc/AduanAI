@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# Aduana needs a PostgreSQL 18 database the chart does not create, and a Secret with the keys below.
+#   kubectl create secret generic aduana \
+#     --from-literal=database-password=... --from-literal=master-key="$(openssl rand -base64 32)" \
+#     --from-literal=admin-email=... --from-literal=admin-password=...
+
+image:
+  repository: ghcr.io/rnachoc/aduanai
+  tag: ""
+  pullPolicy: IfNotPresent
+
+replicaCount: 1  # one node in v1 (ADR 12)
+
+database:
+  url: jdbc:postgresql://postgres:5432/aduana
+  user: aduana
+
+# The Secret that holds database-password, master-key, admin-email and admin-password.
+existingSecret: aduana
+
+# Upstream MCP servers, as the `aduana.upstreams` list of application.yaml.
+upstreams: |
+  aduana:
+    upstreams: []
+
+# The policy bundle: policy.yaml and, under tests, its test files by name.
+policy:
+  policy.yaml: |
+    version: 1
+    defaults:
+      decision: deny
+    rules: []
+  tests: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

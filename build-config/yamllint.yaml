@@ -5,6 +5,8 @@ ignore: |
   **/node_modules/
   **/target/
   **/dist/
+  # Helm templates are Go templates, not YAML until rendered; make helm-check renders and lints them.
+  deploy/helm/*/templates/
 rules:
   line-length:
     max: 140

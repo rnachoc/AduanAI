@@ -34,7 +34,7 @@ SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src
 DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo test-console console-e2e demo replay attacks attacks-check bench scan release-check test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
+	test-policy test-audit test-gateway test-demo test-console console-e2e demo replay attacks attacks-check bench scan release-check helm-check test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -62,6 +62,7 @@ lint: lint-image ## Run every static check: authorship, commits, formats, secret
 	$(LINT) python scripts/check_commits.py --range HEAD
 	$(LINT) python scripts/check_pinned_images.py
 	$(LINT) python scripts/check_readme_numbers.py
+	$(MAKE) helm-check
 	$(LINT) ruff check scripts verifier
 	$(LINT) ruff format --check scripts verifier
 	$(LINT) yamllint -s -c build-config/yamllint.yaml .
@@ -181,6 +182,13 @@ release-check: ## Everything a release needs: lint, tests, stack, e2e, console f
 	$(MAKE) console-e2e
 	$(MAKE) attacks-check
 	$(MAKE) scan
+
+helm-check: ## Lint the Helm chart and check what it renders against YAML lint and the Kubernetes schemas
+	$(RUN) --entrypoint helm $(HELM_IMAGE) lint --strict deploy/helm/aduana
+	mkdir -p out
+	$(RUN) --entrypoint sh $(HELM_IMAGE) -c 'helm template t deploy/helm/aduana > /tmp/a.yaml && 	helm template t deploy/helm/aduana --set-string "policy.tests.crm\.yaml=- name: x" > /tmp/b.yaml && 	cat /tmp/a.yaml /tmp/b.yaml' > out/helm-rendered.yaml
+	$(LINT) yamllint -d "{extends: default, rules: {document-start: disable, line-length: {max: 140}, braces: {max-spaces-inside: 1}, brackets: {max-spaces-inside: 1}}}" out/helm-rendered.yaml
+	$(RUN) $(KUBECONFORM_IMAGE) -strict -summary out/helm-rendered.yaml
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks

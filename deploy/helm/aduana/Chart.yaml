@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+apiVersion: v2
+name: aduana
+description: A control gateway for AI agents, with an external PostgreSQL database.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/rnachoc/AduanAI
+sources:
+  - https://github.com/rnachoc/AduanAI
+maintainers:
+  - name: Ignacio Rodríguez Caro
+    url: https://www.linkedin.com/in/ignaciorodriguezcaro/

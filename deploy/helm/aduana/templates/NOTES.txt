@@ -1,0 +1,8 @@
+Aduana is starting as {{ include "aduana.fullname" . }}.
+
+It needs the PostgreSQL database at {{ .Values.database.url }} and the Secret "{{ .Values.existingSecret }}"
+with database-password, master-key, admin-email and admin-password.
+
+Reach the console and the MCP endpoint through a TLS proxy or ingress in front of the service, for example:
+  kubectl port-forward svc/{{ include "aduana.fullname" . }} 8080:{{ .Values.service.port }}
+then open http://localhost:8080 (session cookies are Secure: use HTTPS outside a port-forward).
