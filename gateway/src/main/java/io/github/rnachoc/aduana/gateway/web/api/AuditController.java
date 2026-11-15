@@ -76,6 +76,30 @@ public class AuditController {
   }
 
   /**
+   * Names the newest entry cheaply, for pages that only need to know where the log ends.
+   *
+   * @param user the signed-in viewer
+   * @return the newest seq and time
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  @GetMapping("/head")
+  public Head head(@AuthenticationPrincipal ConsoleUser user) {
+    return audit
+        .head(user.tenantId())
+        .map(head -> new Head(head.seq(), head.ts()))
+        .orElse(new Head(0, ""));
+  }
+
+  /**
+   * The newest entry.
+   *
+   * @param lastSeq its seq, 0 for an empty log
+   * @param ts its time
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public record Head(long lastSeq, String ts) {}
+
+  /**
    * Verifies the chain and checkpoints as stored.
    *
    * @param user the signed-in viewer

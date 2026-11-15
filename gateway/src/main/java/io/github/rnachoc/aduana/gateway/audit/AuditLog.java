@@ -291,10 +291,21 @@ public class AuditLog {
   }
 
   /**
-   * Reads every checkpoint.
+   * Reads the newest entry's seq, hash and time, without verifying anything.
    *
    * @param tenantId the tenant
-   * @return the checkpoints
+   * @return the head, or empty for an empty log
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public Optional<AuditRepository.Head> head(UUID tenantId) {
+    return repository.head(tenantId);
+  }
+
+  /**
+   * Lists a tenant's checkpoints.
+   *
+   * @param tenantId the tenant
+   * @return the checkpoints in seq order
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public List<ObjectNode> checkpoints(UUID tenantId) {

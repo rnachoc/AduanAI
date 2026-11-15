@@ -259,7 +259,7 @@ public class PolicyService {
    * @return its facts
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  private static CallContext.PrincipalFacts facts(Principal principal) {
+  static CallContext.PrincipalFacts facts(Principal principal) {
     return new CallContext.PrincipalFacts(
         principal.name(), principal.attributes(), new HashSet<>(principal.groups()));
   }
@@ -271,7 +271,7 @@ public class PolicyService {
    * @return its facts
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  private static CallContext.ToolFacts facts(CatalogTool tool) {
+  static CallContext.ToolFacts facts(CatalogTool tool) {
     return new CallContext.ToolFacts(
         tool.serverName(),
         tool.name(),
