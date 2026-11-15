@@ -10,7 +10,7 @@ export MSYS_NO_PATHCONV := 1
 include scripts/images.env
 
 COMPOSE := docker compose
-NETWORK := aduana_default
+NETWORK := $(or $(COMPOSE_PROJECT_NAME),aduana)_default
 LINT_IMAGE := aduana-lint:local
 RUN := docker run --rm -v "$(CURDIR)":/src -w /src
 SAFE_GIT := -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=*
@@ -34,7 +34,7 @@ SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src
 DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo test-console console-e2e demo replay attacks attacks-check bench test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
+	test-policy test-audit test-gateway test-demo test-console console-e2e demo replay attacks attacks-check bench scan release-check test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -166,6 +166,21 @@ bench: ## Measure the latency Aduana adds at 50, 200 and 500 requests per second
 	docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src -w /src \
 	$(JDK_IMAGE) java bench/Bench.java
 	$(COMPOSE) up -d --wait --force-recreate gateway
+
+scan: ## Scan the gateway image with Trivy; fails on critical or high vulnerabilities that have a fix
+	docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v aduana-trivy:/root/.cache $(TRIVY_IMAGE) \
+	image --scanners vuln --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 aduana-gateway:local
+
+release-check: ## Everything a release needs: lint, tests, stack, e2e, console flows, attacks, scan
+	$(MAKE) lint
+	$(MAKE) test
+	$(MAKE) up
+	$(MAKE) smoke
+	$(MAKE) e2e
+	$(MAKE) demo
+	$(MAKE) console-e2e
+	$(MAKE) attacks-check
+	$(MAKE) scan
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks
