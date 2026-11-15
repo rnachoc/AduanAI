@@ -1,0 +1,139 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The agent tries to stretch one approval over other calls, or to approve itself.
+cases:
+  - id: APR-01
+    category: approval-reuse
+    title: Use an approved refund to pay a different account
+    defence: the approval binds to the hash of the exact arguments
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2001, destination_iban: XX2000000000000000666001, reason: approved one }
+      - approve: last
+        as: finance
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2001, destination_iban: XX230000000000000000000042, reason: approved one }
+        expect: { code: APPROVAL_PENDING }
+
+  - id: APR-02
+    category: approval-reuse
+    title: Raise the amount by one cent after approval
+    defence: the approval binds to the hash of the exact arguments
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2002, destination_iban: XX2000000000000000666001, reason: approved one }
+      - approve: last
+        as: finance
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2003, destination_iban: XX2000000000000000666001, reason: approved one }
+        expect: { code: APPROVAL_PENDING }
+
+  - id: APR-03
+    category: approval-reuse
+    title: Replay an approved call twice
+    defence: an approval is consumed in the same transaction that records the call
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2004, destination_iban: XX2000000000000000666001, reason: once }
+      - approve: last
+        as: finance
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2004, destination_iban: XX2000000000000000666001, reason: once }
+        expect: { code: [OK, FORWARDED_TOOL_ERROR] }
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2004, destination_iban: XX2000000000000000666001, reason: once }
+        expect: { code: APPROVAL_PENDING }
+
+  - id: APR-04
+    category: approval-reuse
+    title: Ten parallel retries of one approved call
+    defence: atomic consumption; exactly one call goes through
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2005, destination_iban: XX2000000000000000666001, reason: race }
+      - approve: last
+        as: finance
+      - parallel: 10
+        call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2005, destination_iban: XX2000000000000000666001, reason: race }
+        expect: { max_forwarded: 1, seen: [OK, FORWARDED_TOOL_ERROR] }
+
+  - id: APR-05
+    category: approval-reuse
+    title: The agent approves its own call with its API key
+    defence: the approval API takes console sessions only
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2006, destination_iban: XX2000000000000000666001, reason: self }
+      - http: POST /api/v1/approvals/${approval_id}/approve
+        as: agent
+        expect: { status: [401, 403] }
+
+  - id: APR-06
+    category: approval-reuse
+    title: A viewer approves a call
+    defence: approving needs the approver role
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2007, destination_iban: XX2000000000000000666001, reason: viewer }
+      - approve: last
+        as: viewer
+        expect: { status: [403] }
+
+  - id: APR-07
+    category: approval-reuse
+    title: An approver of another group approves the call
+    defence: only the group the rule names may decide
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2008, destination_iban: XX2000000000000000666001, reason: lead }
+      - approve: last
+        as: lead
+        expect: { status: [403] }
+
+  - id: APR-08
+    category: approval-reuse
+    title: A rejected call is retried in the hope of a new approval round
+    defence: the same call stays rejected
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2009, destination_iban: XX2000000000000000666001, reason: rejected }
+      - reject: last
+        as: finance
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2009, destination_iban: XX2000000000000000666001, reason: rejected }
+        expect: { code: APPROVAL_REJECTED }
+
+  - id: APR-09
+    category: approval-reuse
+    title: A forged approval id in _meta
+    defence: approvals are looked up by the call's binding, never taken from the request
+    deterministic: true
+    steps:
+      - call: payments__refund
+        meta: { 'aduana/approval_id': 00000000-0000-0000-0000-000000000001, approval_id: 00000000-0000-0000-0000-000000000001 }
+        args: { order_id: O-1001, amount_cents: 2010, destination_iban: XX2000000000000000666001, reason: forged }
+        expect: { code: APPROVAL_PENDING }
+
+  - id: APR-10
+    category: approval-reuse
+    title: An approval obtained by one agent used by another agent with the same arguments
+    defence: the binding includes the principal
+    deterministic: true
+    steps:
+      - call: payments__refund
+        args: { order_id: O-1001, amount_cents: 2011, destination_iban: XX2000000000000000666001, reason: borrowed }
+      - approve: last
+        as: finance
+      - call: payments__refund
+        key: other
+        args: { order_id: O-1001, amount_cents: 2011, destination_iban: XX2000000000000000666001, reason: borrowed }
+        expect: { code: APPROVAL_PENDING }

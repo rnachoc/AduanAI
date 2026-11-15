@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# The administration API reached by an agent, by nobody, or without the CSRF token.
+cases:
+  - id: ADM-01
+    category: admin-routes
+    title: An agent key on the administration API
+    defence: /api/v1 takes console sessions only
+    deterministic: true
+    steps:
+      - http: GET /api/v1/principals
+        as: agent
+        expect: { status: [401, 403] }
+
+  - id: ADM-02
+    category: admin-routes
+    title: An anonymous request lists the catalog
+    defence: the route table makes it admin only
+    deterministic: true
+    steps:
+      - http: GET /api/v1/tools
+        as: anonymous
+        expect: { status: [401] }
+
+  - id: ADM-03
+    category: admin-routes
+    title: A viewer loads a new policy
+    defence: the route table makes it admin only
+    deterministic: true
+    steps:
+      - http: POST /api/v1/policy
+        as: viewer
+        body: { policy: 'version: 1', tests: {} }
+        expect: { status: [403] }
+
+  - id: ADM-04
+    category: admin-routes
+    title: An administrator's session used without the CSRF token, as a forged form would
+    defence: CSRF double-submit token on every write
+    deterministic: true
+    steps:
+      - http: POST /api/v1/principals
+        as: admin
+        csrf: false
+        body: { kind: agent, name: 'atk-csrf-${run}', attributes: { team: support } }
+        expect: { status: [403] }
+
+  - id: ADM-05
+    category: admin-routes
+    title: An approver creates an API key for an agent
+    defence: the route table makes it admin only
+    deterministic: true
+    steps:
+      - http: POST /api/v1/principals/${agent_id}/keys
+        as: finance
+        expect: { status: [403] }
+
+  - id: ADM-06
+    category: admin-routes
+    title: Framework endpoints that leak internals (actuator, env, heapdump)
+    defence: anything not in the route table is denied
+    deterministic: true
+    steps:
+      - http: GET /actuator/env
+        as: anonymous
+        expect: { status: [401, 403, 404] }
+      - http: GET /actuator/heapdump
+        as: admin
+        expect: { status: [401, 403, 404] }
+
+  - id: ADM-07
+    category: admin-routes
+    title: A viewer exports the whole log
+    defence: the route table makes the export admin only
+    deterministic: true
+    steps:
+      - http: GET /api/v1/audit/export
+        as: viewer
+        expect: { status: [403] }

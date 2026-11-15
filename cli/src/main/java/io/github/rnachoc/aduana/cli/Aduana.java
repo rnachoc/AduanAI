@@ -2,6 +2,7 @@
 // Copyright 2026 Ignacio Rodríguez Caro
 package io.github.rnachoc.aduana.cli;
 
+import io.github.rnachoc.aduana.cli.attacks.AttacksCommand;
 import io.github.rnachoc.aduana.policy.PolicyBundle;
 import io.github.rnachoc.aduana.policy.PolicyParser;
 import io.github.rnachoc.aduana.policy.PolicyTestRunner;
@@ -25,7 +26,7 @@ import picocli.CommandLine.Spec;
     name = "aduana",
     mixinStandardHelpOptions = true,
     version = "aduana 0.1.0",
-    subcommands = {Aduana.Policy.class, AuditCommands.class},
+    subcommands = {Aduana.Policy.class, AuditCommands.class, AttacksCommand.class},
     description = "Check Aduana policies and logs.")
 public final class Aduana implements Callable<Integer> {
 

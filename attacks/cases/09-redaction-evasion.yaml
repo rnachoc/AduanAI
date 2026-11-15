@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# Sensitive values written so the detectors miss them, to get them into the log in clear or past a
+# deny_args_containing obligation. Detectors are pattern matchers: encodings they do not decode escape.
+cases:
+  - id: RED-01
+    category: redaction-evasion
+    title: A card number with dashes in a search
+    defence: the card detector accepts spaces and dashes and checks Luhn
+    deterministic: true
+    steps:
+      - call: crm__search_customers
+        args: { query: '4111-1111-1111-1111' }
+        expect: { code: POLICY_DENIED }
+
+  - id: RED-02
+    category: redaction-evasion
+    title: An IBAN in groups of four goes into the log redacted
+    defence: the IBAN detector accepts grouped IBANs; the log keeps only a hint
+    deterministic: true
+    steps:
+      - call: crm__search_customers
+        args: { query: 'ES91 2100 0418 4502 0005 1332' }
+      - log: CALL_DECIDED
+        expect: { not_contains: ['2100 0418 4502', '21000418450200051332'], contains: ['[REDACTED:iban:'] }
+
+  - id: RED-03
+    category: redaction-evasion
+    title: An e-mail address in a search is redacted in the log
+    defence: the e-mail detector; the log keeps the first letter and the domain
+    deterministic: true
+    steps:
+      - call: crm__search_customers
+        args: { query: 'ana@example.com' }
+      - log: CALL_DECIDED
+        expect: { not_contains: ['ana@example.com'], contains: ['[REDACTED:email:'] }
+
+  - id: RED-04
+    category: redaction-evasion
+    title: A card number with zero-width spaces between digit groups
+    defence: the card detector matches digits separated by spaces or dashes only
+    deterministic: false
+    steps:
+      - call: crm__search_customers
+        args: { query: "4111​1111​1111​1111" }
+        expect: { code: POLICY_DENIED }
+
+  - id: RED-05
+    category: redaction-evasion
+    title: A card number written with full-width digits
+    defence: the card detector matches ASCII digits only
+    deterministic: false
+    steps:
+      - call: crm__search_customers
+        args: { query: "４１１１１１１１１１１１１１１１" }
+        expect: { code: POLICY_DENIED }
+
+  - id: RED-06
+    category: redaction-evasion
+    title: A card number base64-encoded
+    defence: detectors do not decode base64
+    deterministic: false
+    steps:
+      - call: crm__search_customers
+        args: { query: 'NDExMTExMTExMTExMTExMQ==' }
+        expect: { code: POLICY_DENIED }
+
+  - id: RED-07
+    category: redaction-evasion
+    title: A card number split across two searches
+    defence: each call is inspected on its own
+    deterministic: false
+    steps:
+      - call: crm__search_customers
+        args: { query: '4111 1111' }
+      - call: crm__search_customers
+        args: { query: '1111 1111' }
+        expect: { code: POLICY_DENIED }
+
+  - id: RED-08
+    category: redaction-evasion
+    title: A DNI with its control letter in lower case reaches the log
+    defence: the DNI detector accepts upper and lower case letters
+    deterministic: false
+    steps:
+      - call: crm__search_customers
+        args: { query: '12345678z' }
+      - log: CALL_DECIDED
+        expect: { not_contains: ['12345678z'] }
+
+  - id: RED-09
+    category: redaction-evasion
+    title: A Spanish mobile number with dots
+    defence: the phone detector accepts spaces, not dots
+    deterministic: false
+    steps:
+      - call: crm__search_customers
+        args: { query: '600.000.001' }
+      - log: CALL_DECIDED
+        expect: { not_contains: ['600.000.001'] }
+
+  - id: RED-10
+    category: redaction-evasion
+    title: A secret assignment with a long random value
+    defence: the secret detector flags key = value pairs with high entropy
+    deterministic: true
+    steps:
+      - call: crm__search_customers
+        args: { query: 'api_key=Zx9Qp2Lm7Rt4Vb8Nc3Kd5Wy6' }  # gitleaks:allow (fake key)
+        expect: { code: [POLICY_DENIED, ARGS_INVALID] }
