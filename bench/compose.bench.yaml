@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Ignacio Rodríguez Caro
+# Overrides for `make bench`: the 50-rule policy and rate limits high enough never to refuse.
+services:
+  gateway:
+    environment:
+      ADUANA_POLICY_DIRECTORY: /etc/aduana/bench-policy
+      ADUANA_LIMITS_CALLSPERMINUTEPERTOOL: "100000000"
+      ADUANA_LIMITS_CALLSPERMINUTEPERPRINCIPAL: "100000000"
+    volumes:
+      - ./bench/policy:/etc/aduana/bench-policy:ro
