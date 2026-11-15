@@ -11,7 +11,7 @@ person when it matters, and recorded in a log that anyone can verify.
 
 [Replay of the demo](replay/index.html) · [Case study](docs/case-study.md) · [Decisions (ADR)](docs/adr/)
 
-![The approval queue: a refund to a test account held for finance, with the IBAN redacted to its first and last four characters and the rule that held it](docs/images/console-approvals.png)
+![The approval queue as security sees it: the refund an injected web page asked for, held by rule untrusted-flow-into-side-effects, flagged FLOW_FROM_UNTRUSTED with the log entry the IBAN came from, the IBAN redacted to XX20…6001](docs/images/console-approvals-untrusted.png)
 
 ## Quick start
 

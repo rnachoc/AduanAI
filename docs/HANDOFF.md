@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 10 (done after Phase 11).
+Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 12: every phase of `docs/PLAN.md` §10 is done.
 
 ## What exists
 
@@ -22,38 +22,41 @@ Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 10 
 - `make up`, `make smoke`, `make e2e` (seeds via `scripts/demo_seed.py`, runs scenarios through the
   gateway in both protocol eras), `make demo-direct`, `make lint`, `make test`.
 
+Phase 7 added `inspection/` (detectors, redaction, injection marks, taint), ADR 10 and 19. Phase 8
+added `limits/` (rates, budget, idempotency), the result size limit and `upstream/StdioConnector`, ADR 9.
+Phase 9 added `console/` (Angular 22), `security/SecurityHeadersFilter`, `make test-console`,
+`make demo`, `make console-e2e`, ADR 20. Phase 11 (done before Phase 10, as the plan's cut line allows)
+added the attack bench (`cli/.../attacks/`, `attacks/`, `make attacks`, `make attacks-check`), the
+latency benchmark (`bench/`, `make bench`), group commit for the log (ADR 21), `docs/threat-model.md`,
+`scripts/check_readme_numbers.py`, ADR 22. Phase 10 added `policy/PolicySimulator` (ADR 23), the
+simulation API, CLI command and screen, `GET /api/v1/audit/head`, `make replay` and `replay/`. Phase 12
+made the image distroless with the CLI inside, added `make scan` (Trivy), `make release-check`,
+`deploy/compose.prod.yaml`, `release.yml`, `pages.yml`, the final README, `docs/case-study.md`,
+`docs/video-script.md` and ADR 12 to 15.
+
+`PROGRESS.md` has every acceptance criterion with its commits; `docs/evidence/phase-NN.md` the runs.
+
 ## What is left
 
-Phases 9 to 12 of `docs/PLAN.md` §10. Phase 7 added `inspection/`, `V5__inspection.sql`,
-`docs/detectors.md`, ADR 10 and 19. Phase 8 added `limits/` (`LimitService`: per-tool and per-principal
-rates in one-minute windows plus a daily budget, all in `rate_bucket`; `IdempotencyService`:
-`_meta["aduana/idempotency-key"]`), `V6__limits_and_idempotency.sql`, the result size limit,
-`upstream/StdioConnector` (allow-listed `stdio:/path?arg=…` endpoints, clean environment, kill on
-timeout, restart with backoff), the `notes` demo server over stdio and ADR 9.
+Not done, and why:
 
-Not done in Phase 8: a memory limit for stdio children (Java has no portable way to set one; run the
-gateway in a container with a memory limit, or pass `-Xmx`-style flags in the command when the child
-supports them), credentials for stdio servers (none is injected), and the `notes` server is not behind the
-gateway in `compose.yaml` because the gateway image has no Node.js; its stdio contract is tested in
-`demo/test/stdio.test.ts` and the gateway's stdio path in `StdioTest` with a Java fake.
-
-Phase 9 added `console/` (Angular 22, hash routing, screens in `src/app/pages/`, typed client in
-`api.ts`, all styles in `src/styles.css` so the CSP needs no inline styles), the console stage in the
-`Dockerfile`, `security/SecurityHeadersFilter`, `make test-console`, `make demo`, `make console-e2e`
-(Playwright in its pinned image, on the compose network, saving `docs/images/`) and ADR 20.
-
-Phase 11 added the attack bench (`cli/.../attacks/`, `attacks/cases/`, `make attacks`,
-`make attacks-check`), the latency benchmark (`bench/Bench.java`, `make bench`), group commit for the
-log (ADR 21), `docs/threat-model.md`, `scripts/check_readme_numbers.py` and ADR 22.
-
-Phase 10 added `policy/PolicySimulator` (ADR 23), `POST /api/v1/policy/simulate`, `GET /api/v1/audit/head`,
-`aduana policy simulate`, the Simulation screen, `scripts/build_replay.py`, `make replay` and
-`replay/index.html` (regenerate it after `make demo`).
-
-Next: Phase 12 (the image already serves the console; add the CLI to it, `deploy/compose.prod.yaml`,
-the three-command quick start, the final README per plan §11 with numbers quoted from the reports,
-`docs/case-study.md`, `docs/video-script.md`, the Pages workflow for `replay/`, `release.yml`,
-`make release-check`, Trivy scan).
+- Nothing is pushed: the repository has no remote. CI, `release.yml` and `pages.yml` have never run on
+  GitHub. When it is pushed: replace `<owner>` in the README's clone command, swap the static CI badge
+  for the workflow's live badge, enable Pages (source: GitHub Actions), and tag `v0.1.0` to publish the
+  image.
+- The README's support section has the contact e-mail but not the LinkedIn link the plan asks for: the
+  profile URL is not in the repository.
+- The arm64 half of the multi-arch build is defined in `release.yml` but was not built locally.
+- CA12.1 was timed on this machine with a fresh clone, a fresh project name and a cache-free image
+  builder; base images already pulled on this machine were not pulled again. See
+  `docs/evidence/phase-12.md`.
+- Helm chart (optional in the plan): not started.
+- From earlier phases: no memory limit for stdio children and no credentials for them; the `notes`
+  stdio server is not behind the gateway in compose (the image has no Node.js); the OIDC JWT path has no
+  test; CA5.5 was simulated by revoking INSERT rather than stopping PostgreSQL; the latency objective of
+  15 ms added p99 at 200 req/s was missed by 0.5 ms (the 50 ms minimum is met).
+- Heuristic gaps the attack bench measures (trace-scoped taint, detector evasions, English-only
+  injection patterns) are listed in `attacks/REPORT.md` and `docs/threat-model.md`.
 
 ## Known traps
 
