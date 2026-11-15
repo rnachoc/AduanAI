@@ -323,6 +323,15 @@ class AuditLogTest {
     assertThat(page.get(0).path("seq").asLong()).isEqualTo(1);
   }
 
+  @Test
+  void the_head_names_the_newest_entry_without_verifying_the_chain() {
+    long seq =
+        audit.append(Tenants.DEFAULT, AuditRecord.of("TOOL_CHANGED").reason("HEAD").build()).seq();
+    JsonNode head = admin.send("GET", "/api/v1/audit/head", null).body();
+    assertThat(head.path("lastSeq").asLong()).isGreaterThanOrEqualTo(seq);
+    assertThat(head.path("ts").asString()).isNotBlank();
+  }
+
   /**
    * Reads the newest entries other than checkpoints, oldest first.
    *
