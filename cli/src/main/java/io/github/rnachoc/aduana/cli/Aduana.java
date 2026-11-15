@@ -86,7 +86,7 @@ public final class Aduana implements Callable<Integer> {
   @Command(
       name = "policy",
       description = "Validate and test policy bundles.",
-      subcommands = {Validate.class, Test.class})
+      subcommands = {Validate.class, Test.class, Simulate.class})
   static final class Policy implements Callable<Integer> {
 
     @Spec private CommandLine.Model.CommandSpec spec;
@@ -210,5 +210,103 @@ public final class Aduana implements Callable<Integer> {
       return new Loaded(Optional.empty(), FAILED);
     }
     return new Loaded(Optional.of(((PolicyParser.Result.Valid) result).bundle()), OK);
+  }
+
+  /**
+   * `aduana policy simulate <dir> --url <gateway>`: replay logged decisions against a candidate
+   * bundle on the gateway, without loading it.
+   *
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  @Command(name = "simulate", description = "Replay logged decisions against a candidate bundle.")
+  static final class Simulate implements Callable<Integer> {
+
+    @Parameters(
+        index = "0",
+        description = "Candidate bundle directory with policy.yaml and tests/.")
+    private Path directory;
+
+    @picocli.CommandLine.Option(
+        names = "--url",
+        required = true,
+        description = "The gateway's base URL.")
+    private java.net.URI url;
+
+    @picocli.CommandLine.Option(
+        names = "--from",
+        description = "First log entry; the newest 20 000 entries when absent.")
+    private Long from;
+
+    @picocli.CommandLine.Option(
+        names = "--to",
+        description = "Last log entry; the end when absent.")
+    private Long to;
+
+    @Spec private CommandLine.Model.CommandSpec spec;
+
+    /**
+     * Runs the simulation and prints the changes, then the decisions it could not judge.
+     *
+     * @return 0 when it ran, 1 when the candidate was refused, 2 on a usage error
+     * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+     */
+    @Override
+    public Integer call() {
+      java.io.PrintWriter out = spec.commandLine().getOut();
+      try {
+        BundleFiles files = BundleFiles.read(directory);
+        tools.jackson.databind.json.JsonMapper json =
+            tools.jackson.databind.json.JsonMapper.builder().build();
+        tools.jackson.databind.node.ObjectNode body =
+            json.createObjectNode().put("policy", files.policy());
+        files.tests().forEach(body.putObject("tests")::put);
+        if (from != null) {
+          body.put("fromSeq", from);
+        }
+        if (to != null) {
+          body.put("toSeq", to);
+        }
+        java.net.http.HttpResponse<String> response =
+            AuditCommands.signedIn(url).post("/api/v1/policy/simulate", body.toString());
+        tools.jackson.databind.JsonNode result = json.readTree(response.body());
+        if (response.statusCode() != 200) {
+          result
+              .path("errors")
+              .forEach(error -> spec.commandLine().getErr().println(error.asString()));
+          return 1;
+        }
+        out.printf(
+            "seq %d to %d, %d decisions: %d change, %d unchanged, %d unknown (candidate %s)%n",
+            result.path("firstSeq").asLong(),
+            result.path("lastSeq").asLong(),
+            result.path("decisions").asInt(),
+            result.path("changed").asInt(),
+            result.path("unchanged").asInt(),
+            result.path("unknown").asInt(),
+            result.path("candidateSha256").asString());
+        for (tools.jackson.databind.JsonNode change : result.path("changes")) {
+          StringBuilder examples = new StringBuilder();
+          change.path("examples").forEach(e -> examples.append(' ').append(e.path("seq").asLong()));
+          out.printf(
+              "  %s -> %s x%d by %s (e.g. seq%s)%n",
+              change.path("before").asString(),
+              change.path("after").asString(),
+              change.path("count").asInt(),
+              change.path("rules").asString(),
+              examples);
+        }
+        for (tools.jackson.databind.JsonNode unknown : result.path("unknowns")) {
+          out.printf(
+              "  unknown seq %d %s: %s%n",
+              unknown.path("seq").asLong(),
+              unknown.path("tool").asString(),
+              unknown.path("reason").asString());
+        }
+        return 0;
+      } catch (IOException exception) {
+        spec.commandLine().getErr().println("simulation failed: " + exception.getMessage());
+        return USAGE;
+      }
+    }
   }
 }

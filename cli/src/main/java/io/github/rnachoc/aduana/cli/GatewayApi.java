@@ -4,6 +4,7 @@ package io.github.rnachoc.aduana.cli;
 
 import java.io.IOException;
 import java.net.CookieManager;
+import java.net.HttpCookie;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -25,6 +26,7 @@ final class GatewayApi {
 
   private final URI base;
   private final HttpClient http;
+  private final CookieManager cookies = new CookieManager();
 
   /**
    * Creates a client with its own cookie jar.
@@ -36,7 +38,7 @@ final class GatewayApi {
     this.base = base;
     this.http =
         HttpClient.newBuilder()
-            .cookieHandler(new CookieManager())
+            .cookieHandler(cookies)
             .connectTimeout(Duration.ofSeconds(10))
             .build();
   }
@@ -88,6 +90,29 @@ final class GatewayApi {
       throw new IOException("GET " + path + " answered HTTP " + response.statusCode());
     }
     return response.body();
+  }
+
+  /**
+   * Posts JSON with the session's CSRF token.
+   *
+   * @param path the API path
+   * @param body the JSON body
+   * @return the status and body
+   * @throws IOException if the exchange fails
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  HttpResponse<String> post(String path, String body) throws IOException {
+    get("/api/v1/auth/me");
+    HttpRequest.Builder request =
+        HttpRequest.newBuilder(base.resolve(path))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body));
+    for (HttpCookie cookie : cookies.getCookieStore().get(base)) {
+      if (cookie.getName().equals("XSRF-TOKEN")) {
+        request.header("X-XSRF-TOKEN", cookie.getValue());
+      }
+    }
+    return send(request.build());
   }
 
   /**
