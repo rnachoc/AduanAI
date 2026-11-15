@@ -6,8 +6,8 @@ import io.github.rnachoc.aduana.gateway.audit.AuditAppended;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import org.springframework.context.event.EventListener;
 import org.springframework.http.MediaType;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -53,7 +53,7 @@ public class ActivityController {
    * @param event the appended entry's summary
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  @EventListener
+  @TransactionalEventListener(fallbackExecution = true)
   public void onAppended(AuditAppended event) {
     for (SseEmitter emitter : emitters) {
       try {

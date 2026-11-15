@@ -13,6 +13,8 @@ import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Call rates per principal and tool, per principal, and a daily budget, counted in PostgreSQL so
@@ -33,6 +35,7 @@ public class LimitService {
   private final long perTool;
   private final long perPrincipal;
   private final long dailyBudget;
+  private final TransactionTemplate transactions;
 
   /**
    * Why a call was refused.
@@ -49,18 +52,28 @@ public class LimitService {
    * @param jdbc the JDBC client
    * @param clock the clock
    * @param properties the configured limits
+   * @param transactionManager runs each call's counting in one transaction
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  public LimitService(JdbcClient jdbc, Clock clock, AduanaProperties properties) {
+  public LimitService(
+      JdbcClient jdbc,
+      Clock clock,
+      AduanaProperties properties,
+      PlatformTransactionManager transactionManager) {
     this.jdbc = jdbc;
     this.clock = clock;
     this.perTool = properties.limits().callsPerMinutePerTool();
     this.perPrincipal = properties.limits().callsPerMinutePerPrincipal();
     this.dailyBudget = properties.limits().dailyBudget();
+    this.transactions = new TransactionTemplate(transactionManager);
   }
 
   /**
    * Counts a call against its limits; a refused call still counts, so hammering does not pay.
+   *
+   * <p>The counting runs in one transaction that does not wait for its commit to reach disk
+   * (`synchronous_commit = off`): a crash can lose the last fraction of a second of counts, never a
+   * log entry. ADR 9.
    *
    * @param tenantId the tenant
    * @param principalId the agent
@@ -70,6 +83,23 @@ public class LimitService {
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public Optional<Refusal> admit(UUID tenantId, UUID principalId, String tool, int cost) {
+    return transactions.execute(status -> {
+      jdbc.sql("set local synchronous_commit to off").update();
+      return countCall(tenantId, principalId, tool, cost);
+    });
+  }
+
+  /**
+   * Counts the call in its windows and the budget.
+   *
+   * @param tenantId the tenant
+   * @param principalId the agent
+   * @param tool the tool
+   * @param cost the tool's budget units
+   * @return the refusal, or empty
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Optional<Refusal> countCall(UUID tenantId, UUID principalId, String tool, int cost) {
     Instant now = clock.instant();
     Optional<Refusal> refusal =
         rate(tenantId, "tool:" + principalId + ":" + tool, perTool, now)

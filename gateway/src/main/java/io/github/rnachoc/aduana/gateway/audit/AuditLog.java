@@ -10,14 +10,27 @@ import java.time.Clock;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -42,6 +55,25 @@ public class AuditLog {
   private final Clock clock;
   private final ApplicationEventPublisher events;
   private final long checkpointEvery;
+  private final TransactionTemplate transactions;
+  private final LinkedBlockingQueue<Pending> queue = new LinkedBlockingQueue<>();
+  private final Thread writer;
+
+  /** The most entries one transaction commits together. */
+  private static final int BATCH = 256;
+
+  /** How long a caller waits for its entry before treating the log as unavailable. */
+  private static final long WAIT_SECONDS = 30;
+
+  /**
+   * An entry waiting for the writer.
+   *
+   * @param tenantId the tenant
+   * @param record what to record
+   * @param done completed with the entry once it is committed
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private record Pending(UUID tenantId, AuditRecord record, CompletableFuture<Appended> done) {}
 
   /**
    * Where an entry landed.
@@ -61,6 +93,7 @@ public class AuditLog {
    * @param clock the clock
    * @param events publishes appended entries to the activity stream
    * @param checkpointEvery sign a checkpoint after this many entries
+   * @param transactionManager runs the writer's transactions
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   public AuditLog(
@@ -69,17 +102,26 @@ public class AuditLog {
       JsonMapper json,
       Clock clock,
       ApplicationEventPublisher events,
-      @Value("${aduana.audit.checkpoint-every:100}") long checkpointEvery) {
+      @Value("${aduana.audit.checkpoint-every:100}") long checkpointEvery,
+      PlatformTransactionManager transactionManager) {
     this.repository = repository;
     this.keys = keys;
     this.json = json;
     this.clock = clock;
     this.events = events;
     this.checkpointEvery = checkpointEvery;
+    this.transactions = new TransactionTemplate(transactionManager);
+    this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    this.writer = Thread.ofPlatform().daemon().name("audit-writer").unstarted(this::write);
+    this.writer.start();
   }
 
   /**
-   * Appends an entry, and a signed checkpoint when one is due.
+   * Appends an entry, and a signed checkpoint when one is due, and returns once it is committed.
+   *
+   * <p>Entries from concurrent callers are committed together by one writer (group commit): one
+   * lock, one transaction and one flush for the whole group, in arrival order. A caller still gets
+   * its answer only after its own entry is durable, and an error if the group failed.
    *
    * @param tenantId the tenant
    * @param record what to record
@@ -88,9 +130,77 @@ public class AuditLog {
    *     then not perform the action (principle 5)
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
-  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Appended append(UUID tenantId, AuditRecord record) {
-    return appendLocked(tenantId, record);
+    CompletableFuture<Appended> done = new CompletableFuture<>();
+    queue.add(new Pending(tenantId, record, done));
+    try {
+      return done.get(WAIT_SECONDS, TimeUnit.SECONDS);
+    } catch (ExecutionException exception) {
+      if (exception.getCause() instanceof DataAccessException failure) {
+        throw failure;
+      }
+      throw new DataAccessResourceFailureException("audit log unavailable", exception.getCause());
+    } catch (TimeoutException exception) {
+      throw new DataAccessResourceFailureException("audit log did not answer in time", exception);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new DataAccessResourceFailureException("interrupted", exception);
+    }
+  }
+
+  /**
+   * The writer: takes whatever is queued, commits it per tenant in one transaction, and answers
+   * each caller.
+   *
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private void write() {
+    while (!Thread.currentThread().isInterrupted()) {
+      List<Pending> batch = new ArrayList<>();
+      try {
+        batch.add(queue.take());
+      } catch (InterruptedException exception) {
+        return;
+      }
+      queue.drainTo(batch, BATCH - 1);
+      Map<UUID, List<Pending>> byTenant = new LinkedHashMap<>();
+      batch.forEach(p -> byTenant.computeIfAbsent(p.tenantId(), id -> new ArrayList<>()).add(p));
+      byTenant.forEach(this::commit);
+    }
+  }
+
+  /**
+   * Commits one tenant's queued entries together, or fails them all.
+   *
+   * @param tenantId the tenant
+   * @param pending the entries, in arrival order
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private void commit(UUID tenantId, List<Pending> pending) {
+    try {
+      List<Appended> appended =
+          transactions.execute(status -> {
+            repository.lock(tenantId);
+            List<Appended> out = new ArrayList<>();
+            pending.forEach(p -> out.add(appendHeld(tenantId, p.record())));
+            return out;
+          });
+      for (int index = 0; index < pending.size(); index++) {
+        pending.get(index).done().complete(appended.get(index));
+      }
+    } catch (RuntimeException exception) {
+      pending.forEach(p -> p.done().completeExceptionally(exception));
+    }
+  }
+
+  /**
+   * Stops the writer when the gateway stops.
+   *
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  @jakarta.annotation.PreDestroy
+  public void stop() {
+    writer.interrupt();
   }
 
   /**
@@ -118,6 +228,18 @@ public class AuditLog {
    */
   private Appended appendLocked(UUID tenantId, AuditRecord record) {
     repository.lock(tenantId);
+    return appendHeld(tenantId, record);
+  }
+
+  /**
+   * Appends while the caller holds the tenant lock, and signs a checkpoint when one is due.
+   *
+   * @param tenantId the tenant
+   * @param record what to record
+   * @return the entry's seq and hash
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  private Appended appendHeld(UUID tenantId, AuditRecord record) {
     Optional<AuditRepository.Head> head = repository.head(tenantId);
     Appended appended = insert(tenantId, record, head);
     if (appended.seq() % checkpointEvery == 0) {
