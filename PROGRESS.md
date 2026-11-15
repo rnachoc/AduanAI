@@ -266,8 +266,10 @@ Done on branch `phase-12-release`, merged into `main`. Nothing is pushed or tagg
 | CA | Result |
 |---|---|
 | CA12.1 `git clone`, `make up`, `make demo` → console with data in under 10 minutes | met on this machine: 31 s with Docker's caches, image builds 75 s with a cache-free builder; base images already present (`docs/evidence/phase-12.md`) |
-| CA12.2 README follows §11 point by point | met except the LinkedIn link, which is not in the repository |
+| CA12.2 README follows §11 point by point | met (the LinkedIn link was added after the phase) |
 | CA12.3 `make release-check` passes | met: rc 0 in 1055 s (lint, tests, stack, e2e, console flows, attack report, licences, history secrets, Trivy) |
 | CA12.4 non-root, no shell, `HEALTHCHECK`, Trivy without fixable critical or high | met: distroless nonroot (65532), no `/bin/sh`, exec-form health check, Trivy 0.70.0: 0 |
 
-Not done: the arm64 build was not run locally; Helm (optional) not started.
+After the phase: the arm64 image built locally under emulation and starts; the optional Helm chart
+(`deploy/helm/aduana`) passes `make helm-check` (helm lint, yamllint, kubeconform: 6 resources valid) but
+was not installed on a cluster; released as `v0.1.0`.

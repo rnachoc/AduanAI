@@ -41,15 +41,15 @@ look, sign-in hero, page heads, summary tiles; the Playwright flows now create t
 
 Not done, and why:
 
-- Published at https://github.com/rnachoc/AduanAI (public). No tag yet: tag `v0.1.0` to run
-  `release.yml` and publish the image to GHCR.
-- The README's support section has the contact e-mail but not the LinkedIn link the plan asks for: the
-  profile URL is not in the repository.
-- The arm64 half of the multi-arch build is defined in `release.yml` but was not built locally.
+- Published at https://github.com/rnachoc/AduanAI (public), released as `v0.1.0`: `release.yml`
+  publishes `ghcr.io/rnachoc/aduanai` for amd64 and arm64.
+- The arm64 image was built locally under emulation (359 s) and starts (`os.arch = aarch64`); it has not
+  run on real arm64 hardware.
 - CA12.1 was timed on this machine with a fresh clone, a fresh project name and a cache-free image
   builder; base images already pulled on this machine were not pulled again. See
   `docs/evidence/phase-12.md`.
-- Helm chart (optional in the plan): not started.
+- The Helm chart (`deploy/helm/aduana`, `make helm-check`: helm lint, yamllint and kubeconform on the
+  render) has not been installed on a cluster. It expects an external PostgreSQL and a Secret.
 - From earlier phases: no memory limit for stdio children and no credentials for them; the `notes`
   stdio server is not behind the gateway in compose (the image has no Node.js); the OIDC JWT path has no
   test; CA5.5 was simulated by revoking INSERT rather than stopping PostgreSQL; the latency objective of

@@ -165,7 +165,7 @@ Details and sources: [`docs/comparison.md`](docs/comparison.md).
 | `attacks/` | The attack cases and their report |
 | `bench/` | The latency benchmark and its report |
 | `replay/` | The static replay page |
-| `deploy/` | Compose file for production and demo configuration |
+| `deploy/` | Compose file and Helm chart for production, demo configuration |
 | `docs/` | Plan, ADRs, formats, threat model, evidence per phase |
 
 ## Status
@@ -186,12 +186,13 @@ Details and sources: [`docs/comparison.md`](docs/comparison.md).
 | 11 | Attack bench, performance and reports | done |
 | 12 | Packaging, documentation and publication | done |
 
-Not yet: a tagged release (no image published).
+Released: `v0.1.0`, image `ghcr.io/rnachoc/aduanai` for amd64 and arm64.
 
 ## Commercial use and support
 
 Aduana is Apache-2.0: use it, change it and ship it, commercially or not. For support or help
-deploying it: rnachoccontact@gmail.com.
+deploying it: rnachoccontact@gmail.com or
+[LinkedIn](https://www.linkedin.com/in/ignaciorodriguezcaro/).
 
 ## Licence
 
