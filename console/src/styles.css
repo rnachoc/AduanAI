@@ -179,13 +179,21 @@ form.filters {
 }
 
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--muted);
   border-radius: 4px;
   padding: 0.35rem 0.5rem;
+}
+
+pre,
+code,
+textarea {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 0.85rem;
 }
 
 button {

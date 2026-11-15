@@ -74,8 +74,8 @@ export class ActivityPage implements OnInit, OnDestroy {
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   async ngOnInit(): Promise<void> {
-    const verification = await this.api.verify();
-    const entries = await this.api.audit({ fromSeq: verification.lastSeq - 49, limit: 50 });
+    const head = await this.api.head();
+    const entries = await this.api.audit({ fromSeq: head.lastSeq - 49, limit: 50 });
     this.items.set(
       entries
         .map((entry) => ({
