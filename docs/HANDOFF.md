@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 11.
+Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 10 (done after Phase 11).
 
 ## What exists
 
@@ -46,10 +46,14 @@ Phase 11 added the attack bench (`cli/.../attacks/`, `attacks/cases/`, `make att
 `make attacks-check`), the latency benchmark (`bench/Bench.java`, `make bench`), group commit for the
 log (ADR 21), `docs/threat-model.md`, `scripts/check_readme_numbers.py` and ADR 22.
 
-Next: Phase 12 (single image already serves the console; add `deploy/compose.prod.yaml`, the three-command
-quick start, the final README per plan §11 with numbers quoted from the reports, `docs/case-study.md`,
-`docs/video-script.md`, the Pages workflow for `replay/`, `release.yml`, `make release-check`, Trivy
-scan), then Phase 10 (policy simulation and the static `replay/` page).
+Phase 10 added `policy/PolicySimulator` (ADR 23), `POST /api/v1/policy/simulate`, `GET /api/v1/audit/head`,
+`aduana policy simulate`, the Simulation screen, `scripts/build_replay.py`, `make replay` and
+`replay/index.html` (regenerate it after `make demo`).
+
+Next: Phase 12 (the image already serves the console; add the CLI to it, `deploy/compose.prod.yaml`,
+the three-command quick start, the final README per plan §11 with numbers quoted from the reports,
+`docs/case-study.md`, `docs/video-script.md`, the Pages workflow for `replay/`, `release.yml`,
+`make release-check`, Trivy scan).
 
 ## Known traps
 
@@ -89,6 +93,9 @@ scan), then Phase 10 (policy simulation and the static `replay/` page).
   users per run; `make bench` creates its own agent. Never run load through the demo `support-agent`:
   its counters persist (CA8.1) and `make e2e` would be rate limited for a minute.
 - A new attack case must be stable across runs: the report may only contain codes, never ids or times.
+- The demo log is large after `make attacks` and `make bench` (157 000+ entries): full chain
+  verification takes seconds; use `/api/v1/audit/head` when only the end of the log is needed.
+- Angular here is zoneless: a field set after an `await` does not repaint; use a signal.
 - `@Value` cannot bind an indexed list (`x[0]`); stdio's allow-list is one comma-separated property.
 - Spring's String-to-URI conversion of `aduana.upstreams[*].endpoint` percent-encodes `%`: in YAML write
   stdio arguments unencoded (`stdio:/usr/bin/node?arg=/app/server.js`); through the API send a valid URI.

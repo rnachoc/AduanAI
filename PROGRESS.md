@@ -12,7 +12,7 @@
 | 7 | Redaction, injection flags and taint | done |
 | 8 | Limits, idempotency and stdio servers | done |
 | 9 | Console | done |
-| 10 | Simulation and replay | not started |
+| 10 | Simulation and replay | done |
 | 11 | Attack bench, performance and reports | done |
 | 12 | Packaging, documentation and publication | not started |
 
@@ -222,8 +222,8 @@ Done on branch `phase-09-console`, merged into `main`.
 
 ## Phase 11: Attack bench, performance and reports
 
-Done on branch `phase-11-attacks`, merged into `main`. Phase 10 (simulation and replay) is postponed
-after Phase 12, as the plan's cut line allows.
+Done on branch `phase-11-attacks`, merged into `main`, before Phase 10 (the plan's cut line puts
+simulation after the attack bench).
 
 - Tests first (`AttackBenchTest` 5, `AuditLogTest` +1, `test_check_readme_numbers.py` 5): `7163f5c`.
 - `aduana attacks run`, 91 cases, `make attacks`, `make attacks-check`, CI: `3779a7f`.
@@ -238,3 +238,19 @@ after Phase 12, as the plan's cut line allows.
 | CA11.2 100 % of deterministic cases stopped; heuristic ones reported with their real rate and the ones that escape | met: 78 of 78 deterministic; heuristic 7 of 13, the six escapes listed in `attacks/REPORT.md` |
 | CA11.3 published report with measured numbers; added p99 at most 50 ms at 200 req/s (objective 15 ms) | met: 15.5 ms added p99 at 200 req/s (`bench/REPORT.md`); the 15 ms objective is missed by 0.5 ms |
 | CA11.4 CI fails if a README number is edited by hand | met: `check_readme_numbers.py` in `make lint`; its test shows a hand-edited number failing |
+
+## Phase 10: Simulation and replay
+
+Done on branch `phase-10-simulation`, merged into `main` after Phase 11.
+
+- Tests first: `SimulationTest` 5, `AuditLogTest` +1 (head), `test_build_replay.py` 4, console specs and
+  two Playwright flows.
+- `policy/PolicySimulator` (ADR 23), `ArgumentObligations` shared with the live pipeline,
+  `POST /api/v1/policy/simulate`, `GET /api/v1/audit/head`, `aduana policy simulate`, the Simulation
+  screen, `scripts/build_replay.py`, `make replay`, `replay/index.html`.
+
+| CA | Result |
+|---|---|
+| CA10.1 the active bundle against its own traffic gives zero differences | met: `the_active_policy_against_its_own_traffic_changes_nothing`; on the demo stack 9 476 decisions, 0 changed (Playwright flow too) |
+| CA10.2 conditions on redacted arguments are unknown, reported apart, never unchanged | met: `conditions_on_redacted_arguments_are_unknown_never_unchanged`; 24 refunds unknown on the demo stack, listed with `$.destination_iban`; outcomes that cannot depend on the redacted value stay known (`a_redacted_value_that_cannot_change_the_outcome_does_not_make_it_unknown`) |
+| CA10.3 the replay page works opened without a server | met: Playwright opens `file:///src/replay/index.html`, steps through it, and sees no request other than `file:` |
