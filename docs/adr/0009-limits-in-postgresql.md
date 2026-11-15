@@ -33,11 +33,14 @@ to run, back up and secure.
 - If the counters or the key store cannot be read or written, the call is refused (`AUDIT_UNAVAILABLE`),
   as with the log (ADR 8).
 - Old windows are deleted hourly after two days; expired keys hourly.
+- Amended 2026-11-15 (Phase 11, ADR 21): a call's counting runs in one transaction with
+  `synchronous_commit = off`. A crash can lose the last fraction of a second of counts, so a few calls
+  more than the limit could pass right after a crash; log entries keep synchronous commits.
 
 ## Consequences
 
 One node, or several sharing a database, count the same. Every limited call costs two to four small
-writes; the throughput this allows has not been measured. Redis would be faster per call; it can replace
+writes; the throughput is measured in `bench/REPORT.md`. Redis would be faster per call; it can replace
 these two tables behind the same `LimitService` and `IdempotencyService` if a measurement ever shows the
 need.
 

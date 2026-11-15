@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 9.
+Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 11.
 
 ## What exists
 
@@ -42,10 +42,14 @@ Phase 9 added `console/` (Angular 22, hash routing, screens in `src/app/pages/`,
 `Dockerfile`, `security/SecurityHeadersFilter`, `make test-console`, `make demo`, `make console-e2e`
 (Playwright in its pinned image, on the compose network, saving `docs/images/`) and ADR 20.
 
-Next, following the plan's cut line (§10: 9 and 11 are the last to drop; simulation can wait):
-Phase 11 (attack bench of at least 80 cases with `attacks/REPORT.md`, `bench/` latency report, threat
-model, `scripts/check_readme_numbers.py`), then Phase 12 (packaging, final README, case study, release
-check), then Phase 10 (policy simulation and the static `replay/` page).
+Phase 11 added the attack bench (`cli/.../attacks/`, `attacks/cases/`, `make attacks`,
+`make attacks-check`), the latency benchmark (`bench/Bench.java`, `make bench`), group commit for the
+log (ADR 21), `docs/threat-model.md`, `scripts/check_readme_numbers.py` and ADR 22.
+
+Next: Phase 12 (single image already serves the console; add `deploy/compose.prod.yaml`, the three-command
+quick start, the final README per plan §11 with numbers quoted from the reports, `docs/case-study.md`,
+`docs/video-script.md`, the Pages workflow for `replay/`, `release.yml`, `make release-check`, Trivy
+scan), then Phase 10 (policy simulation and the static `replay/` page).
 
 ## Known traps
 
@@ -81,6 +85,10 @@ check), then Phase 10 (policy simulation and the static `replay/` page).
 - The console's Playwright flows need `make demo` (or `make e2e`) first: they sign in as the seeded
   approvers, and the refund they hold uses an IBAN no untrusted page has shown (otherwise the approval
   goes to `security`, not `finance`).
+- `make attacks` recreates the demo servers first (fresh order totals) and creates fresh agents and
+  users per run; `make bench` creates its own agent. Never run load through the demo `support-agent`:
+  its counters persist (CA8.1) and `make e2e` would be rate limited for a minute.
+- A new attack case must be stable across runs: the report may only contain codes, never ids or times.
 - `@Value` cannot bind an indexed list (`x[0]`); stdio's allow-list is one comma-separated property.
 - Spring's String-to-URI conversion of `aduana.upstreams[*].endpoint` percent-encodes `%`: in YAML write
   stdio arguments unencoded (`stdio:/usr/bin/node?arg=/app/server.js`); through the API send a valid URI.
