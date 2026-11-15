@@ -23,6 +23,8 @@ MAVEN := docker run --rm -v "$(CURDIR)":/src -v aduana-m2:/root/.m2 \
 PYTHON := $(RUN) $(PYTHON_IMAGE) python
 LINT := $(RUN) $(SAFE_GIT) $(LINT_IMAGE)
 NODE := docker run --rm -v "$(CURDIR)":/src -v aduana-npm:/root/.npm -w /src/demo $(NODE_IMAGE)
+CONSOLE_NODE := docker run --rm -v "$(CURDIR)":/src -v aduana-npm:/root/.npm -w /src/console \
+	-e NG_CLI_ANALYTICS=false $(NODE_IMAGE)
 SCENARIOS := scenarios/support-happy-path.yaml scenarios/injected-refund-direct.yaml
 GATEWAY_SCENARIOS := scenarios/gateway/support-through-aduana.yaml scenarios/gateway/injected-refund-through-aduana.yaml
 CLI := docker run --rm -v "$(CURDIR)":/src -w /src $(JDK_IMAGE) java -jar cli/target/aduana-cli.jar
@@ -32,7 +34,7 @@ SEED := docker run --rm --network $(NETWORK) --env-file .env -v "$(CURDIR)":/src
 DIRECT_URLS :=crm=http://crm:3001/mcp,payments=http://payments:3002/mcp,webfetch=http://webfetch:3003/mcp
 
 .PHONY: help up down logs smoke lint lint-fast lint-image test test-scripts test-java \
-	test-policy test-audit test-gateway test-demo test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
+	test-policy test-audit test-gateway test-demo test-console console-e2e demo test-cli test-verifier audit-export audit-verify policy-test bench-policy mutation demo-direct e2e hooks secrets
 
 help: ## List every target
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "} {printf "  %-14s %s\n", $$1, $$2}'
@@ -67,6 +69,7 @@ lint: lint-image ## Run every static check: authorship, commits, formats, secret
 	sh scripts/check_licenses.sh
 	$(MAVEN) spotless:check checkstyle:check
 	$(NODE) sh -c 'npm ci --no-audit --no-fund --loglevel=error && npm run --silent lint'
+	$(CONSOLE_NODE) sh -c 'npm ci --no-audit --no-fund --loglevel=error && npm run --silent lint'
 
 lint-fast: ## Secrets in the staged diff and authorship of staged files (the pre-commit hook)
 	sh scripts/lint_fast.sh
@@ -74,7 +77,7 @@ lint-fast: ## Secrets in the staged diff and authorship of staged files (the pre
 secrets: ## Scan the whole git history for secrets
 	$(RUN) $(SAFE_GIT) $(GITLEAKS_IMAGE) git --redact --no-banner /src
 
-test: test-scripts test-java test-demo test-verifier ## Run every test suite
+test: test-scripts test-java test-demo test-console test-verifier ## Run every test suite
 
 test-scripts: ## Test the repository scripts
 	$(PYTHON) -m unittest discover -s scripts -p 'test_*.py'
@@ -130,6 +133,19 @@ e2e: ## Run the scenarios through the gateway, in 2026-07-28 and in 2025-11-25 m
 	$(COMPOSE) up -d --wait --force-recreate crm payments webfetch
 	KEY=$$($(SEED)) && sh scripts/e2e_round.sh "$$KEY" && \
 	$(COMPOSE) up -d --wait --force-recreate payments && sh scripts/e2e_round.sh "$$KEY" --legacy
+
+test-console: ## Unit-test the console (70 % line coverage) and build it
+	$(CONSOLE_NODE) sh -c 'npm ci --no-audit --no-fund --loglevel=error && npm test && npm run --silent build'
+
+demo: ## Seed the running stack and run the scripted scenarios through it, leaving data in the console
+	$(COMPOSE) up -d --wait crm payments webfetch
+	KEY=$$($(SEED)) && sh scripts/e2e_round.sh "$$KEY"
+
+console-e2e: ## Run the Playwright console flows and axe against the running stack; saves docs/images
+	KEY=$$($(SEED)) && docker run --rm --network $(NETWORK) --hostname console-e2e --env-file .env \
+	-e AGENT_KEY="$$KEY" -e CONSOLE_URL=http://gateway:8080 -e STUB_HOST=console-e2e \
+	-e SCREENSHOTS=/src/docs/images -v "$(CURDIR)":/src -w /src/console $(PLAYWRIGHT_IMAGE) \
+	sh -c 'test -d node_modules || npm ci --no-audit --no-fund --loglevel=error; npx playwright test'
 
 hooks: ## Use the repository git hooks
 	git config core.hooksPath .githooks

@@ -5,3 +5,6 @@
 .git
 .env
 docs
+console/coverage
+console/test-results
+console/playwright-report

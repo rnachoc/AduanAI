@@ -11,7 +11,7 @@
 | 6 | Approvals | done |
 | 7 | Redaction, injection flags and taint | done |
 | 8 | Limits, idempotency and stdio servers | done |
-| 9 | Console | not started |
+| 9 | Console | done |
 | 10 | Simulation and replay | not started |
 | 11 | Attack bench, performance and reports | not started |
 | 12 | Packaging, documentation and publication | not started |
@@ -201,3 +201,21 @@ Done on branch `phase-08-limits`, merged into `main`.
 
 Not done: memory limit for stdio children (not available portably from Java; documented in
 `docs/HANDOFF.md`), credentials for stdio servers, the `notes` server behind the gateway in compose.
+
+## Phase 9: Console
+
+Done on branch `phase-09-console`, merged into `main`.
+
+- Gateway, tests first (`ConsoleServingTest` 3): `68ddafc`; static console files, header filter with the
+  content security policy, last checkpoint in `/api/v1/audit/verify`: `629f9bc`.
+- Console tests (Vitest specs, Playwright flows, axe), `ApprovalTest` queue filter: `d5be67c`.
+- `console/` (Angular 22, six screens and sign-in), console stage in the `Dockerfile`, SSE opens at once,
+  queue filtered by group, `make test-console`, `make demo`, `make console-e2e`, screenshots, ADR 20: `0d7cd60`.
+
+| CA | Result |
+|---|---|
+| CA9.1 five Playwright flows: sign in, approve, reject, review a definition change, search the log | met: `make console-e2e`, flows 1 to 5 |
+| CA9.2 no tokens in `localStorage`; CSP allowing only its own origin | met: flow 1 (storage empty, session cookie `HttpOnly`), `ConsoleServingTest`, and the CSP flow (header without `unsafe-inline`, no CSP violation in the browser console on six screens) |
+| CA9.3 axe-core (licence checked) without critical errors on the six screens | met: no `critical` or `serious` violation in light and dark; axe-core is MPL-2.0 (ADR 20) |
+| CA9.4 a `viewer` sees no approve buttons and the API answers 403 by hand | met: viewer flow (no Approvals link, guard returns to Activity, POST approve → 403) |
+| CA9.5 real screenshots in `docs/images/` with `make demo` data | met: six PNGs from `make console-e2e` after `make demo` |

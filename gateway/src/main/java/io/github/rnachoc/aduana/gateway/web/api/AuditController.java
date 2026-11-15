@@ -83,9 +83,52 @@ public class AuditController {
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
    */
   @GetMapping("/verify")
-  public ChainVerifier.Report verify(@AuthenticationPrincipal ConsoleUser user) {
-    return audit.verify(user.tenantId());
+  public Verification verify(@AuthenticationPrincipal ConsoleUser user) {
+    ChainVerifier.Report report = audit.verify(user.tenantId());
+    List<ObjectNode> checkpoints = audit.checkpoints(user.tenantId());
+    Optional<LastCheckpoint> last =
+        checkpoints.isEmpty()
+            ? Optional.empty()
+            : Optional.of(
+                new LastCheckpoint(
+                    checkpoints.getLast().path("seq").asLong(),
+                    checkpoints.getLast().path("ts").asString()));
+    return new Verification(
+        report.entries(),
+        report.lastSeq(),
+        report.checkpoints(),
+        report.problems(),
+        report.problems().isEmpty(),
+        last.orElse(null));
   }
+
+  /**
+   * The chain's verification, as the CLI and the console read it.
+   *
+   * @param entries entries checked
+   * @param lastSeq the last `seq`
+   * @param checkpoints checkpoints checked
+   * @param problems what is wrong; empty when intact
+   * @param intact true when there are no problems
+   * @param lastCheckpoint the newest checkpoint, or null
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public record Verification(
+      long entries,
+      long lastSeq,
+      long checkpoints,
+      List<ChainVerifier.Problem> problems,
+      boolean intact,
+      LastCheckpoint lastCheckpoint) {}
+
+  /**
+   * The newest signed checkpoint.
+   *
+   * @param seq the entry it covers
+   * @param ts when it was signed
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  public record LastCheckpoint(long seq, String ts) {}
 
   /**
    * Exports entries (or, with `checkpoints=true`, checkpoints) as JSON Lines, one object per line.

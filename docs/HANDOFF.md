@@ -1,6 +1,6 @@
 # Handoff
 
-Rewritten at the end of every session. Last update: 2026-11-14, end of Phase 8.
+Rewritten at the end of every session. Last update: 2026-11-15, end of Phase 9.
 
 ## What exists
 
@@ -37,9 +37,15 @@ supports them), credentials for stdio servers (none is injected), and the `notes
 gateway in `compose.yaml` because the gateway image has no Node.js; its stdio contract is tested in
 `demo/test/stdio.test.ts` and the gateway's stdio path in `StdioTest` with a Java fake.
 
-Next is Phase 9, the console (plan §8, Phase 9): Angular, served by the gateway, over the existing
-`/api/v1` endpoints (catalog, identity, policy, audit, approvals, `/api/v1/events` SSE). Read plan §8
-first; the API is listed in `web/api/`.
+Phase 9 added `console/` (Angular 22, hash routing, screens in `src/app/pages/`, typed client in
+`api.ts`, all styles in `src/styles.css` so the CSP needs no inline styles), the console stage in the
+`Dockerfile`, `security/SecurityHeadersFilter`, `make test-console`, `make demo`, `make console-e2e`
+(Playwright in its pinned image, on the compose network, saving `docs/images/`) and ADR 20.
+
+Next, following the plan's cut line (§10: 9 and 11 are the last to drop; simulation can wait):
+Phase 11 (attack bench of at least 80 cases with `attacks/REPORT.md`, `bench/` latency report, threat
+model, `scripts/check_readme_numbers.py`), then Phase 12 (packaging, final README, case study, release
+check), then Phase 10 (policy simulation and the static `replay/` page).
 
 ## Known traps
 
@@ -72,6 +78,9 @@ first; the API is listed in `web/api/`.
 - Audit entries are rebuilt from columns for export: any new field must be added to `AuditRepository.FIELDS`,
   `insert` and `map`, and to `docs/audit-format.md` and `verifier/`.
 - `make bench-policy` skips JaCoCo because the coverage check would fail on the benchmark alone.
+- The console's Playwright flows need `make demo` (or `make e2e`) first: they sign in as the seeded
+  approvers, and the refund they hold uses an IBAN no untrusted page has shown (otherwise the approval
+  goes to `security`, not `finance`).
 - `@Value` cannot bind an indexed list (`x[0]`); stdio's allow-list is one comma-separated property.
 - Spring's String-to-URI conversion of `aduana.upstreams[*].endpoint` percent-encodes `%`: in YAML write
   stdio arguments unencoded (`stdio:/usr/bin/node?arg=/app/server.js`); through the API send a valid URI.

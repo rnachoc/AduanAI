@@ -26,7 +26,8 @@ public class ActivityController {
   private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
   /**
-   * Opens a stream.
+   * Opens a stream and sends a comment at once, so the browser sees the stream open before the
+   * first entry.
    *
    * @return the emitter
    * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
@@ -38,6 +39,11 @@ public class ActivityController {
     emitter.onCompletion(() -> emitters.remove(emitter));
     emitter.onTimeout(() -> emitters.remove(emitter));
     emitter.onError(error -> emitters.remove(emitter));
+    try {
+      emitter.send(SseEmitter.event().comment("connected"));
+    } catch (IOException exception) {
+      emitters.remove(emitter);
+    }
     return emitter;
   }
 

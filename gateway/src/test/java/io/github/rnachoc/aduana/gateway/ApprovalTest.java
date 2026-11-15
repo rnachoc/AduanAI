@@ -272,6 +272,16 @@ class ApprovalTest {
   }
 
   @Test
+  void the_queue_lists_only_approvals_the_user_may_decide() {
+    String id = approvalId(pay(agent, "XX07", 700));
+    assertThat(finance.send("GET", "/api/v1/approvals?state=pending", null).body().toString())
+        .contains(id);
+    ApiTestClient security = approver(SECURITY, "security");
+    assertThat(security.send("GET", "/api/v1/approvals?state=pending", null).body().toString())
+        .doesNotContain(id);
+  }
+
+  @Test
   void a_rejected_call_is_answered_rejected_and_never_forwarded() {
     int before = BANK.toolCallCount();
     String id = approvalId(pay(agent, "XX06", 600));

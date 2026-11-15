@@ -14,6 +14,9 @@ spring:
     password: ${ADUANA_DATABASE_PASSWORD:}
   flyway:
     locations: classpath:db/migration
+  web:
+    resources:
+      static-locations: file:${ADUANA_CONSOLE_DIRECTORY:/app/console}/,classpath:/static/
 server:
   port: 8080
   shutdown: graceful

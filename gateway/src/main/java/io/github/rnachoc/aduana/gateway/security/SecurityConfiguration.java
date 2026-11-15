@@ -30,6 +30,11 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 @Configuration
 public class SecurityConfiguration {
 
+  /** The console's static files, served to anyone; its data needs a session. */
+  static final String[] CONSOLE_FILES = {
+    "/", "/index.html", "/*.js", "/*.css", "/*.ico", "/fonts/**", "/media/**"
+  };
+
   /**
    * The MCP endpoint: no session, no CSRF (bearer tokens only); the agent filter authenticates.
    *
@@ -97,6 +102,8 @@ public class SecurityConfiguration {
             authorize
                 .requestMatchers(HttpMethod.GET, "/healthz", "/.well-known/**")
                 .permitAll()
+                .requestMatchers(HttpMethod.GET, CONSOLE_FILES)
+                .permitAll()
                 .requestMatchers("/error")
                 .permitAll()
                 .anyRequest()
@@ -113,6 +120,21 @@ public class SecurityConfiguration {
   @Bean
   public HttpSessionSecurityContextRepository sessionRepository() {
     return new HttpSessionSecurityContextRepository();
+  }
+
+  /**
+   * Adds the content security policy and related headers to every response, before any chain.
+   *
+   * @return the filter registration
+   * @author Ignacio Rodríguez Caro <rnachoccontact@gmail.com>
+   */
+  @Bean
+  public FilterRegistrationBean<SecurityHeadersFilter> securityHeaders() {
+    FilterRegistrationBean<SecurityHeadersFilter> registration =
+        new FilterRegistrationBean<>(new SecurityHeadersFilter());
+    registration.addUrlPatterns("/*");
+    registration.setOrder(Integer.MIN_VALUE);
+    return registration;
   }
 
   /**
