@@ -15,6 +15,6 @@ agent() {
 agent "$@" --gateway http://gateway:8080/mcp \
   scenarios/gateway/support-through-aduana.yaml scenarios/gateway/injected-refund-through-aduana.yaml \
   scenarios/gateway/injected-small-refund.yaml
-docker run --rm --network aduana_default --env-file "$root/.env" -v "$root":/src -w /src/scripts \
+docker run --rm --network "${COMPOSE_PROJECT_NAME:-aduana}_default" --env-file "$root/.env" -v "$root":/src -w /src/scripts \
   "$PYTHON_IMAGE" python demo_approve.py http://gateway:8080 finance@example.com finance payments__refund
 agent "$@" --gateway http://gateway:8080/mcp scenarios/gateway/refund-after-approval.yaml
