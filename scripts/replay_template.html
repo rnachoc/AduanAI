@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aduana replay</title>
+<style>
+:root { --bg:#fff; --surface:#f4f5f7; --text:#16181d; --muted:#4b5262; --line:#d4d7de; --accent:#1f4fbf;
+  --ok:#18492a; --okbg:#e2f4e6; --bad:#7a1712; --badbg:#fde3e1; --warn:#5c4300; --warnbg:#fff1c2; }
+@media (prefers-color-scheme: dark) { :root { --bg:#121418; --surface:#1c1f26; --text:#e9ebf0; --muted:#b2b8c4;
+  --line:#363b46; --accent:#8fb0ff; --ok:#b9ecc9; --okbg:#173523; --bad:#ffd0cb; --badbg:#4a1612;
+  --warn:#ffe39a; --warnbg:#4a3a05; } }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+header { padding:1rem 1.5rem; border-bottom:1px solid var(--line); background:var(--surface); }
+h1 { margin:0; font-size:1.3rem; }
+main { display:grid; grid-template-columns: minmax(16rem, 1fr) 2fr; gap:1.5rem; padding:1.5rem; }
+ol { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.35rem;
+  max-height:75vh; overflow:auto; }
+button { font:inherit; cursor:pointer; border-radius:4px; }
+ol button { width:100%; text-align:left; background:var(--bg); color:var(--text);
+  border:1px solid var(--line); padding:.35rem .6rem; }
+ol button[aria-current="step"] { border:2px solid var(--accent); }
+.nav button { background:var(--accent); color:var(--bg); border:none; padding:.4rem 1rem; }
+.tag { display:inline-block; font-size:.8rem; padding:0 .4rem; margin:0 .25rem .25rem 0;
+  border-radius:3px; border:1px solid var(--line); }
+.allow { background:var(--okbg); color:var(--ok); } .deny, .rejected { background:var(--badbg); color:var(--bad); }
+.require_approval, .approved { background:var(--warnbg); color:var(--warn); }
+pre { background:var(--surface); border:1px solid var(--line); padding:.75rem; overflow:auto; }
+dl { display:grid; grid-template-columns:max-content 1fr; gap:.25rem 1rem; } dt { color:var(--muted); } dd { margin:0; }
+:focus-visible { outline:3px solid #e07b00; outline-offset:2px; }
+@media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+<h1>Aduana replay</h1>
+<p>{{TITLE}}. Recorded from Aduana's log; arguments are redacted as the log keeps them.
+Use the list, the buttons or the arrow keys.</p>
+</header>
+<main>
+<nav aria-label="Steps"><ol id="steps"></ol></nav>
+<section aria-live="polite">
+<div class="nav"><button type="button" id="previous">Previous</button> <button type="button" id="next">Next</button>
+<span id="position"></span></div>
+<h2 id="title"></h2>
+<dl id="facts"></dl>
+<h3>Arguments</h3>
+<pre id="arguments"></pre>
+</section>
+</main>
+<script type="application/json" id="data">{{DATA}}</script>
+<script>
+(function () {
+  var steps = JSON.parse(document.getElementById('data').textContent);
+  var list = document.getElementById('steps');
+  var current = 0;
+  function label(step) {
+    return step.kind === 'approval' ? 'Approval: ' + step.decision : step.tool + ': ' + step.decision;
+  }
+  function add(dl, name, value) {
+    var dt = document.createElement('dt'); dt.textContent = name;
+    var dd = document.createElement('dd');
+    if (Array.isArray(value)) {
+      value.forEach(function (item) {
+        var s = document.createElement('span'); s.className = 'tag'; s.textContent = item; dd.appendChild(s);
+      });
+      if (value.length === 0) { dd.textContent = 'none'; }
+    } else { dd.textContent = value === null || value === undefined || value === '' ? 'none' : String(value); }
+    dl.appendChild(dt); dl.appendChild(dd);
+  }
+  function show(index) {
+    if (steps.length === 0) { document.getElementById('title').textContent = 'No steps recorded.'; return; }
+    current = Math.max(0, Math.min(steps.length - 1, index));
+    var step = steps[current];
+    Array.prototype.forEach.call(list.querySelectorAll('button'), function (b, i) {
+      if (i === current) { b.setAttribute('aria-current', 'step'); } else { b.removeAttribute('aria-current'); }
+    });
+    document.getElementById('position').textContent = 'Step ' + (current + 1) + ' of ' + steps.length;
+    var title = document.getElementById('title');
+    title.textContent = '';
+    var tag = document.createElement('span'); tag.className = 'tag ' + step.decision; tag.textContent = step.decision;
+    title.appendChild(document.createTextNode((step.kind === 'approval' ? 'Approval' : step.tool) + ' '));
+    title.appendChild(tag);
+    var facts = document.getElementById('facts'); facts.textContent = '';
+    add(facts, 'Log entry', 'seq ' + step.seq + ' at ' + step.ts);
+    add(facts, 'Outcome', step.outcome);
+    add(facts, 'Reason', step.reason);
+    add(facts, 'Rules', step.rules);
+    add(facts, 'Flags', step.flags);
+    document.getElementById('arguments').textContent = JSON.stringify(step.arguments, null, 2);
+  }
+  steps.forEach(function (step, index) {
+    var item = document.createElement('li');
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = (index + 1) + '. ' + label(step);
+    button.addEventListener('click', function () { show(index); });
+    item.appendChild(button); list.appendChild(item);
+  });
+  document.getElementById('previous').addEventListener('click', function () { show(current - 1); });
+  document.getElementById('next').addEventListener('click', function () { show(current + 1); });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'ArrowRight') { show(current + 1); }
+    if (event.key === 'ArrowLeft') { show(current - 1); }
+  });
+  show(0);
+})();
+</script>
+</body>
+</html>
