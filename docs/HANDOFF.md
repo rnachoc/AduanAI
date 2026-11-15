@@ -40,10 +40,8 @@ made the image distroless with the CLI inside, added `make scan` (Trivy), `make 
 
 Not done, and why:
 
-- Nothing is pushed: the repository has no remote. CI, `release.yml` and `pages.yml` have never run on
-  GitHub. When it is pushed: replace `<owner>` in the README's clone command, swap the static CI badge
-  for the workflow's live badge, enable Pages (source: GitHub Actions), and tag `v0.1.0` to publish the
-  image.
+- Published at https://github.com/rnachoc/AduanAI (public). No tag yet: tag `v0.1.0` to run
+  `release.yml` and publish the image to GHCR.
 - The README's support section has the contact e-mail but not the LinkedIn link the plan asks for: the
   profile URL is not in the repository.
 - The arm64 half of the multi-arch build is defined in `release.yml` but was not built locally.

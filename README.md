@@ -1,6 +1,6 @@
 # Aduana
 
-[![CI](https://img.shields.io/badge/CI-GitHub_Actions-informational)](.github/workflows/ci.yml)
+[![CI](https://github.com/rnachoc/AduanAI/actions/workflows/ci.yml/badge.svg)](https://github.com/rnachoc/AduanAI/actions/workflows/ci.yml)
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-lightgrey)](PROGRESS.md)
 
@@ -9,7 +9,7 @@ person when it matters, and recorded in a log that anyone can verify.
 
 **[The model proposes, the code decides.](docs/adr/0002-the-model-proposes-the-code-decides.md)**
 
-[Replay of the demo](replay/index.html) · [Case study](docs/case-study.md) · [Decisions (ADR)](docs/adr/)
+[Replay of the demo](https://rnachoc.github.io/AduanAI/) · [Case study](docs/case-study.md) · [Decisions (ADR)](docs/adr/)
 
 ![The approval queue as security sees it: the refund an injected web page asked for, held by rule untrusted-flow-into-side-effects, flagged FLOW_FROM_UNTRUSTED with the log entry the IBAN came from, the IBAN redacted to XX20…6001](docs/images/console-approvals-untrusted.png)
 
@@ -18,7 +18,7 @@ person when it matters, and recorded in a log that anyone can verify.
 Requirements: Docker and make.
 
 ```bash
-git clone https://github.com/<owner>/aduana.git && cd aduana
+git clone https://github.com/rnachoc/AduanAI.git && cd AduanAI
 make up
 make demo
 ```
@@ -186,7 +186,7 @@ Details and sources: [`docs/comparison.md`](docs/comparison.md).
 | 11 | Attack bench, performance and reports | done |
 | 12 | Packaging, documentation and publication | done |
 
-Not yet: a tagged release, the published replay site, and the CI run on GitHub (nothing is pushed).
+Not yet: a tagged release (no image published).
 
 ## Commercial use and support
 
