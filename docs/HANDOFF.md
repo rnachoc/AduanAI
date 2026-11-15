@@ -32,7 +32,8 @@ latency benchmark (`bench/`, `make bench`), group commit for the log (ADR 21), `
 simulation API, CLI command and screen, `GET /api/v1/audit/head`, `make replay` and `replay/`. Phase 12
 made the image distroless with the CLI inside, added `make scan` (Trivy), `make release-check`,
 `deploy/compose.prod.yaml`, `release.yml`, `pages.yml`, the final README, `docs/case-study.md`,
-`docs/video-script.md` and ADR 12 to 15.
+`docs/video-script.md` and ADR 12 to 15. After Phase 12 the console was redesigned (ADR 24): dark-first
+look, sign-in hero, page heads, summary tiles; the Playwright flows now create their own agent.
 
 `PROGRESS.md` has every acceptance criterion with its commits; `docs/evidence/phase-NN.md` the runs.
 
@@ -97,6 +98,8 @@ Not done, and why:
 - The demo log is large after `make attacks` and `make bench` (157 000+ entries): full chain
   verification takes seconds; use `/api/v1/audit/head` when only the end of the log is needed.
 - Angular here is zoneless: a field set after an `await` does not repaint; use a signal.
+- The demo `support-agent` has a daily budget (refunds cost 10 of 1000 units): after many `make demo`
+  or `make e2e` runs in one UTC day its refunds answer `BUDGET_EXCEEDED` until midnight UTC.
 - `@Value` cannot bind an indexed list (`x[0]`); stdio's allow-list is one comma-separated property.
 - Spring's String-to-URI conversion of `aduana.upstreams[*].endpoint` percent-encodes `%`: in YAML write
   stdio arguments unencoded (`stdio:/usr/bin/node?arg=/app/server.js`); through the API send a valid URI.
