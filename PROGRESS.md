@@ -14,7 +14,7 @@
 | 9 | Console | done |
 | 10 | Simulation and replay | done |
 | 11 | Attack bench, performance and reports | done |
-| 12 | Packaging, documentation and publication | not started |
+| 12 | Packaging, documentation and publication | done |
 
 ## Phase 0: Foundations
 
@@ -254,3 +254,20 @@ Done on branch `phase-10-simulation`, merged into `main` after Phase 11.
 | CA10.1 the active bundle against its own traffic gives zero differences | met: `the_active_policy_against_its_own_traffic_changes_nothing`; on the demo stack 9 476 decisions, 0 changed (Playwright flow too) |
 | CA10.2 conditions on redacted arguments are unknown, reported apart, never unchanged | met: `conditions_on_redacted_arguments_are_unknown_never_unchanged`; 24 refunds unknown on the demo stack, listed with `$.destination_iban`; outcomes that cannot depend on the redacted value stay known (`a_redacted_value_that_cannot_change_the_outcome_does_not_make_it_unknown`) |
 | CA10.3 the replay page works opened without a server | met: Playwright opens `file:///src/replay/index.html`, steps through it, and sees no request other than `file:` |
+
+## Phase 12: Packaging, documentation and publication
+
+Done on branch `phase-12-release`, merged into `main`. Nothing is pushed or tagged.
+
+- Distroless image with the CLI, `make scan`, `make release-check`: `ccf8c74`; production compose: `1012482`;
+  `release.yml` and `pages.yml`: `7d519e1`; final README, case study, video script, ADR 12 to 15;
+  e2e and demo fixes found on the way.
+
+| CA | Result |
+|---|---|
+| CA12.1 `git clone`, `make up`, `make demo` → console with data in under 10 minutes | met on this machine: 31 s with Docker's caches, image builds 75 s with a cache-free builder; base images already present (`docs/evidence/phase-12.md`) |
+| CA12.2 README follows §11 point by point | met except the LinkedIn link, which is not in the repository |
+| CA12.3 `make release-check` passes | met: rc 0 in 1055 s (lint, tests, stack, e2e, console flows, attack report, licences, history secrets, Trivy) |
+| CA12.4 non-root, no shell, `HEALTHCHECK`, Trivy without fixable critical or high | met: distroless nonroot (65532), no `/bin/sh`, exec-form health check, Trivy 0.70.0: 0 |
+
+Not done: the arm64 build was not run locally; Helm (optional) not started.
